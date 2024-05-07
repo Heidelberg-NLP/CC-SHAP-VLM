@@ -1,5 +1,5 @@
 # CC-SHAP for VLMs 🖼️
-Official code implementation for the paper "Do Vision &amp; Language Decoders use Images and Text equally? How Self-consistent are their Explanations?"
+Official code implementation for the paper "Do Vision &amp; Language Decoders use Images and Text equally? How Self-consistent are their Explanations?" https://arxiv.org/abs/2404.18624
 
 This is follow-up work building on the paper "On Measuring Faithfulness of Natural Language Explanations" https://arxiv.org/abs/2311.07466  that developed CC-SHAP and applied it to LLMs 📃.
 Now, we extend to VLMs 🖼️+📃.
