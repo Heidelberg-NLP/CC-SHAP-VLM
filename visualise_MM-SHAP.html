@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title> Visualization </title>
+  <style>
+    .wrapper {
+      display: flex;
+      padding: 10px;
+    }
+
+    .caption {
+      /* Set lucida sans as font */
+      font-family: 'Lucida Sans', sans-serif;
+      font-weight: normal;
+      font-size: 26px;
+      margin-left: 10px;
+      box-sizing: border-box;
+    }
+
+    .caption span {
+      display: inline-block;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.4.2/chroma.min.js"
+    integrity="sha512-zInFF17qBFVvvvFpIfeBzo7Tj7+rQxLeTJDmbxjBz5/zIr89YVbTNelNhdTT+/DCrxoVzBeUPVFJsczKbB7sew=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script>
+    let coloredSubstringStarts = [];
+    let coloredSubstringEnds = [];
+    let coloredSubstringInExtra = [];
+    let coloredSubstringColors = [];
+  </script>
+
+</head>
+
+<body>
+  <img id="imgSrc" src="v7w_2371044.jpg" style="display: none;">
+  <div class="wrapper">
+    <canvas id="imgCvs___fullNorm"></canvas>
+    <div class="caption" id="caption___fullNorm"></div>
+  </div>
+  <div class="wrapper">
+    <canvas id="imgCvs___perModNorm"></canvas>
+    <div class="caption" id="caption___perModNorm">
+    </div>
+    <script>
+      window.onload = function () {
+        // variables ----------------
+        // number of rows and columns (patches to fill the image)
+        let boxes = 8;
+        // The part of the text that has ranked tokens must be in captionString and captionArray.
+        // captionString and captionArray must have the same content, but captionArray is split into tokens.
+        // Tokens are colored by the values in resArray minus the last boxes^2 values.
+        // Any tokens in the caption that have no values have no colored background.
+        let captionString = "<s> [INST]: <image> \nWhich caption is a correct description of the image? Is it (A): \"There are no people in the picture.\" or is it (B): \"There are people in the picture.\"? [/INST] The best answer is: (A) [INST] Why? Please explain how you arrived at your answer. [/INST] Explanation:"
+        let captionArray = ["<s>", "[", "INST", "]:", "", "<image>", "", "\n", "Which", "c", "aption", "is", "a", "correct", "description", "of", "the", "image", "?", "Is", "it", "(", "A", "):", "\"", "There", "are", "no", "people", "in", "the", "picture", ".\"", "or", "is", "it", "(", "B", "):", "\"", "There", "are", "people", "in", "the", "picture", ".\"", "?", "[", "/", "INST", "]", "The", "best", "answer", "is", ":", "(", "A", ")", "[", "INST", "]", "Why", "?", "Please", "explain", "how", "you", "arrived", "at", "your", "answer", ".", "[", "/", "INST", "]", "Ex", "plan", "ation", ":"]
+        // The extra string is the text that comes after the tokens and will not receive colored backgrounds.
+        let extraString = " The image you've provided indeed shows a row of wooden benches positioned along the side of a platform, and there are no people visible in the image. Therefore, option (A) is the correct answer to the question provided as a part of the \"Captions\" contest. ";
+        // The resArray receives the values of the image and caption tokens
+        let resArray = [
+        0.11, 0.07, 0.13, -0.13, -0.06, -0.08, 0.01, -0.08, -0.09, 0.09, -0.01, -0.1, -0.09, -0.22, 0.2, -0.06, 0.22, 0.12, -0.02, -0.04, -0.1, 0.27, 0.0, -0.15, 0.05, -0.04, 0.09, 0.18, -0.12, 0.4, -0.04, 0.21, 0.03, 0.1, -0.06, 0.27, 0.11, -0.01, -0.04, 0.06, -0.19, 0.16, -0.03, 0.05, 0.12, 0.26, 0.23, 0.0, 0.09, -0.08, 0.09, 0.04, -0.1, 0.11, 0.03, 0.03, -0.03, 0.08, -0.03, -0.32, 0.02, -0.01, 0.14, 0.03, 0.0, -0.33, -0.23, 0.05, 0.0, 0.0, 0.0, -0.87, 0.83, 0.27, -1.2, -0.62, -0.62, 1.27, 1.46, -0.56, 8.34, -0.62, 1.2, -0.14, 0.14, -0.06, 0.36, -0.05, 0.34, -0.06, -1.84, 1.52, 0.46, 0.27, 0.69, 0.87, -0.06, 3.74, 0.7, 0.58, 4.06, -0.86, -0.07, 0.03, -0.33, -0.03, 1.48, 0.54, 1.29, 0.91, 0.52, 0.2
+        ];
+        // draw values in rectangles in image
+        let drawValues = false;
+        // add colored substrings, first argument is the substring of either caption or extra string, second argument is the color
+        // colorSubstring("", "red");
+        // colorSubstring("(A)", "blue");
+        colorSubstring(" The image you've provided indeed shows a row of wooden benches positioned along the side of a platform, and there are no people visible in the image. Therefore, option (A) is the correct answer to the question provided as a part of the \"Captions\" contest.", "blue"); 
+        // image blending mode and alpha to control the drawing of the image
+        let imgBlendMode = "source-over";
+        let imgAlpha = 0.75;
+        // image and text widths
+        let imageWidth = 400;
+        let captionWidth = 600;
+
+        // create visualization -----
+        // get canvas and draw image
+        let nImgTokens = boxes * boxes;
+        let img = document.getElementById("imgSrc");
+        let imgAspectRatio = img.naturalWidth / img.naturalHeight;
+        let imageHeight = imageWidth / imgAspectRatio;
+        // set color scale
+        let colorScale = chroma.scale('RdBu'); // RdBu
+
+        extraString = extraString.replaceAll("\n", " ");
+
+        function colorSubstring(string, color) {
+          let substrInExtra = extraString.indexOf(string);
+          if (substrInExtra !== -1) {
+            coloredSubstringStarts.push(substrInExtra);
+            coloredSubstringEnds.push(substrInExtra + string.length - 1);
+            coloredSubstringInExtra.push(true);
+            coloredSubstringColors.push(color);
+            return;
+          }
+          potentialStarts = -1;
+          captionArrayString = "";
+          captionStringCompared = captionString;
+          for (let cIndex = 0; cIndex < captionArray.length; cIndex++) {
+            let c = captionArray[cIndex];
+            if (c === "") {
+              continue;
+            }
+            captionStringCompared = captionStringCompared.replace(c, "");
+            if (potentialStarts === -1) {
+              if (string.startsWith(c)) {
+                captionArrayString = "";
+                potentialStarts = cIndex;
+              }
+              captionArrayString += c;
+              if (captionStringCompared.startsWith(" ")) {
+                captionArrayString += " ";
+                captionStringCompared = captionStringCompared.replace(" ", "");
+              }
+              continue;
+            }
+            if (!string.startsWith(captionArrayString)) {
+              if (captionArrayString.trimStart().trimEnd() === string.trimStart().trimEnd()) {
+                coloredSubstringStarts.push(potentialStarts);
+                coloredSubstringEnds.push(cIndex);
+                coloredSubstringInExtra.push(false);
+                coloredSubstringColors.push(color);
+                return;
+              }
+              potentialStarts = -1;
+              continue;
+            }
+            captionArrayString += c;
+            if (captionStringCompared.startsWith(" ")) {
+              captionArrayString += " ";
+              captionStringCompared = captionStringCompared.replace(" ", "");
+            }
+          }
+        }
+
+        function drawImage(canvasId, normValues) {
+          let cvs = document.getElementById("imgCvs" + canvasId);
+          cvs.style.display = "block";
+          cvs.style.width = imageWidth + "px";
+          cvs.style.height = imageHeight + "px";
+          cvs.width = imageWidth;
+          cvs.height = imageHeight;
+          let ctx = cvs.getContext("2d");
+          ctx.drawImage(img, 0, 0, imageWidth, imageHeight);
+          // image and patch dimensions
+          let rects = resArray.slice(0, nImgTokens); // first nImgTokens are image tokens
+          let imgWidth = cvs.width;
+          let imgHeight = cvs.height;
+          let rectWidth = imgWidth / boxes;
+          let rectHeight = imgHeight / boxes;
+
+          // draw colored rectangles over image
+          for (let rIndex = 0; rIndex < rects.length; rIndex++) {
+            const r = rects[rIndex];
+            const normVal = normValues[rIndex];
+            // apply color scale and alpha
+            let col = colorScale(normVal).alpha(imgAlpha).hex();
+            ctx.fillStyle = col;
+            ctx.globalCompositeOperation = imgBlendMode;
+            ctx.fillRect(rIndex % boxes * rectWidth, Math.floor(rIndex / boxes) * rectHeight, rectWidth, rectHeight);
+            if (!drawValues) {
+              continue;
+            }
+            // draw value as text in the middle of the rectangle
+            ctx.fillStyle = "white";
+            ctx.font = "18px Lucida Sans";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.globalCompositeOperation = "difference";
+            ctx.fillText(r.toFixed(2), rIndex % boxes * rectWidth + rectWidth / 2, Math.floor(rIndex / boxes) * rectHeight + rectHeight / 2);
+          }
+        }
+
+        function normalizeArray(arr) {
+          let max = Math.max.apply(null, arr.map(Math.abs));
+          return arr.map(x => (x + max) / (2 * max));
+        }
+
+        // normalize over full results array
+        let fullNormValues = normalizeArray(resArray);
+        drawImage("___fullNorm", fullNormValues.slice(0, nImgTokens));
+
+        // normalize over per modality results array
+        let imgOnlyNormValues = normalizeArray(resArray.slice(0, nImgTokens));
+        let txtOnlyNormValues = normalizeArray(resArray.slice(nImgTokens));
+        drawImage("___perModNorm", imgOnlyNormValues);
+
+
+        function drawCaption(canvasId, captionString, normValues) {
+          // draw the caption
+          let caption = document.getElementById("caption" + canvasId);
+          caption.style.maxWidth = `${captionWidth}px`;
+          captionString = captionString.replace("<s>", "");
+          captionString = captionString.trimStart();
+          function colorSubstringInCaption(cIndex, span) {
+            for (let ccIndex = 0; ccIndex < coloredSubstringStarts.length; ccIndex++) {
+              if (coloredSubstringInExtra[ccIndex]) {
+                continue;
+              }
+              if (cIndex >= coloredSubstringStarts[ccIndex] && cIndex < coloredSubstringEnds[ccIndex]) {
+                span.style.color = coloredSubstringColors[ccIndex];
+              }
+            }
+          }
+          for (let cIndex = 0; cIndex < captionArray.length; cIndex++) {
+            let c = captionArray[cIndex];
+            if (c === "" || c === "<s>") {
+              continue;
+            }
+            if (!captionString.startsWith(c)) {
+              console.log("Error: caption string does not match caption array!")
+              console.log(captionString);
+              console.log(c);
+            }
+            captionString = captionString.replace(c, "");
+
+            c = c.replace("\n", " ");
+            let nextIsSpace = captionString.startsWith(" ");
+            if (nextIsSpace) {
+              captionString = captionString.replace(" ", "");
+            }
+            // just add black text if token has no value
+            if (cIndex >= normValues.length) {
+              let sp = document.createElement("span");
+              if (nextIsSpace) {
+                sp.style.marginRight = "10px";
+              }
+              if (c === " ") {
+                sp.style.whiteSpace = "pre";
+              }
+              sp.innerText = c;
+              colorSubstringInCaption(cIndex, sp);
+              caption.append(sp);
+              continue;
+            }
+            // create span for token
+            let sp = document.createElement("span");
+            if (nextIsSpace) {
+              sp.style.marginRight = "10px";
+            }
+
+            sp.innerText = c;
+            // apply color scale and alpha
+            let col = colorScale(normValues[cIndex]).alpha(0.9).hex();
+            sp.style.backgroundColor = col;
+            // color text according to luminance of bg color:
+            if (chroma(col).luminance() < 0.5) {
+              sp.style.color = "#fff";
+            }
+            colorSubstringInCaption(cIndex, sp);
+            caption.append(sp);
+          }
+          // finally add the extra string
+          let extraStrings = [];
+          let extraStringsColors = [];
+          let startExtra = true;
+          let lastColoredEnd = -1;
+          for (let ceIndex = 0; ceIndex < coloredSubstringInExtra.length; ceIndex++) {
+            if (coloredSubstringInExtra[ceIndex]) {
+              if (startExtra) {
+                if (coloredSubstringStarts[ceIndex] !== 0) {
+                  extraStrings.push(extraString.substring(0, coloredSubstringStarts[ceIndex]));
+                  extraStringsColors.push("black");
+                  startExtra = false;
+                }
+              } else {
+                if (coloredSubstringStarts[ceIndex] !== lastColoredEnd + 1) {
+                  extraStrings.push(
+                    extraString.substring(lastColoredEnd + 1, coloredSubstringStarts[ceIndex])
+                  );
+                  extraStringsColors.push("black");
+                }
+              }
+              extraStrings.push(
+                extraString.substring(
+                  coloredSubstringStarts[ceIndex],
+                  coloredSubstringEnds[ceIndex] + 1
+                )
+              );
+              extraStringsColors.push(coloredSubstringColors[ceIndex]);
+              lastColoredEnd = coloredSubstringEnds[ceIndex];
+            }
+          }
+          if (startExtra && extraStrings.length === 0) {
+            extraStrings.push(extraString);
+          } else {
+            extraStrings.push(
+              extraString.substring(lastColoredEnd + 1, extraString.length)
+            );
+          }
+          extraStringsColors.push("black");
+          let writtenExtra = "";
+          for (let eIndex = 0; eIndex < extraStrings.length; eIndex++) {
+            const e = extraStrings[eIndex];
+            if (e === "") {
+              continue;
+            }
+            let extraStringSplitArray = e.split(" ");
+            for (let sIndex = 0; sIndex < extraStringSplitArray.length; sIndex++) {
+              const s = extraStringSplitArray[sIndex];
+              if (s === "") {
+                if (eIndex !== 0 || sIndex !== 0) {
+                  continue;
+                }
+              }
+              let sp = document.createElement("span");
+              writtenExtra += s;
+              let writtenExtraIndex = extraString.indexOf(writtenExtra);
+              if (extraString[writtenExtraIndex + writtenExtra.length] === " ") {
+                sp.style.marginRight = "10px";
+                writtenExtra += " ";
+              }
+              sp.style.color = extraStringsColors[eIndex];
+              sp.innerText = s;
+              caption.append(sp);
+            }
+          }
+        }
+
+        // draw caption over full results array
+        drawCaption("___fullNorm", captionString, fullNormValues.slice(nImgTokens));
+        // draw caption over per modality results array
+        drawCaption("___perModNorm", captionString, txtOnlyNormValues);
+      }
+    </script>
+</body>
+
+</html>
