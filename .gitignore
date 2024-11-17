@@ -1,13 +1,4 @@
 /.vscode
 /__pycache__
 *.pyc
-results_cluster/*
-results_helix/*
-results_helix_done/*
-results_json-1/*
-results_helix(old)/*
 figures/*
-results_valse_helix/*
-results_json/*
-results_json_valse/*
-results_mm-shap_helix/*

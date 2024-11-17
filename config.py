@@ -1,10 +1,10 @@
 max_new_tokens = 100
 visualize = True
 TESTS = [
-    'atanasova_counterfactual',
+    # 'atanasova_counterfactual',
     'cc_shap-posthoc',
-    'turpin',
-    'lanham',
+    # 'turpin',
+    # 'lanham',
     'cc_shap-cot',
 ]
 
@@ -13,6 +13,9 @@ MODELS = {
     'llava_mistral': 'llava-hf/llava-v1.6-mistral-7b-hf',
     'llava_vicuna': 'llava-hf/llava-v1.6-vicuna-7b-hf',
     'llama2-13b-chat': 'meta-llama/Llama-2-13b-chat-hf',
+    'cogvlm': 'THUDM/cogvlm-chat-hf',
+    'mplug-owl3-2b': 'mPLUG/mPLUG-Owl3-2B-241014',
+    'mplug-owl3-7b': 'mPLUG/mPLUG-Owl3-7B-240728',
 }
 
 

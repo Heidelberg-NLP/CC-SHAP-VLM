@@ -4,7 +4,7 @@ print("Cuda is available:", torch.cuda.is_available())
 from accelerate import Accelerator
 import pandas as pd
 import json
-from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration
+from transformers import AutoTokenizer, AutoModel, AutoModelForCausalLM, AutoProcessor, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration, AutoConfig
 from PIL import Image
 import random, os
 from tqdm import tqdm
@@ -34,21 +34,27 @@ num_samples = int(sys.argv[3])
 save_json = int(sys.argv[4])
 data_root = sys.argv[5]
 
-if model_name == "llava_vicuna":
-    from transformers import BitsAndBytesConfig
-    # specify how to quantize the model with bitsandbytes
-    quantization_config = BitsAndBytesConfig(
-        # load_in_8bit=True,
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.float16,
-    ) # 8 just load_in_8bit=True,
+# load model
+if "mplug" in model_name:
+    config = AutoConfig.from_pretrained(MODELS[model_name], trust_remote_code=True)
     with torch.no_grad():
-        model = LlavaNextForConditionalGeneration.from_pretrained(MODELS[model_name], torch_dtype=torch.float16, 
-            low_cpu_mem_usage=True,
-            use_flash_attention_2=True,
-            quantization_config = quantization_config
-        ) # .to("cuda") not needed for bitsandbytes anymore
+        model = AutoModel.from_pretrained(MODELS[model_name], attn_implementation='sdpa', torch_dtype=torch.half,
+        trust_remote_code=True, device_map="auto").eval()
+# elif model_name == "llava_vicuna": # comment this in if you want to use quantisation for llava_vicuna and flash_attention_2
+#     from transformers import BitsAndBytesConfig
+#     # specify how to quantize the model with bitsandbytes
+#     quantization_config = BitsAndBytesConfig(
+#         # load_in_8bit=True,
+#         load_in_4bit=True,
+#         bnb_4bit_quant_type="nf4",
+#         bnb_4bit_compute_dtype=torch.float16,
+#     ) # 8 just load_in_8bit=True,
+#     with torch.no_grad():
+#         model = LlavaNextForConditionalGeneration.from_pretrained(MODELS[model_name], torch_dtype=torch.float16, 
+#             low_cpu_mem_usage=True,
+#             use_flash_attention_2=True,
+#             quantization_config = quantization_config
+#         ) # .to("cuda") not needed for bitsandbytes anymore
 else:
     if model_name == "bakllava":
         ModelClass = LlavaForConditionalGeneration
@@ -57,26 +63,26 @@ else:
     with torch.no_grad():
         model = ModelClass.from_pretrained(MODELS[model_name], torch_dtype=torch.float16, 
             low_cpu_mem_usage=True, #device_map="auto"
-            use_flash_attention_2=True, # untested for bakllava
+            # use_flash_attention_2=True, # comment this in if you want to use flash_attention_2
         ).to("cuda")
-tokenizer = AutoProcessor.from_pretrained(MODELS[model_name])
+
+# load tokenizer
+if "mplug" in model_name:
+    tokenizer_real = AutoTokenizer.from_pretrained(MODELS[model_name])
+    processor = model.init_processor(tokenizer_real)
+    tokenizer = {"tokenizer": tokenizer_real, "processor": processor}
+else:
+    tokenizer = AutoProcessor.from_pretrained(MODELS[model_name])
 print(f"Done loading model and tokenizer after {time.time()-t1:.2f}s.")
 
-# prompt = "USER: <image>\nWhat is this?\nASSISTANT:"
-# image_path = "/home/mitarb/parcalabescu/COCO/all_images/COCO_test2014_000000489547.jpg"
-# raw_image = Image.open(image_path)
-# print(vlm_generate(prompt, raw_image, model, tokenizer, max_new_tokens=max_new_tokens))
 
-# prompt = "USER: <image>\nWhat is this? (A): a pizza, or (B): a dog. \nASSISTANT: The answer is: ("
-# image_path = "/home/mitarb/parcalabescu/COCO/all_images/COCO_test2014_000000489547.jpg"
-# raw_image = Image.open(image_path)
-# print(vlm_classify(prompt, raw_image, model, tokenizer, labels=['Y', 'X', 'A', 'B', 'var' ,'Y']))
-# print(f"This script so far (generation) needed {time.time()-t1:.2f}s.")
-
-with torch.no_grad():
-    helper_model = AutoModelForCausalLM.from_pretrained(MODELS['llama2-13b-chat'], torch_dtype=torch.float16, device_map="auto", token=True)
-helper_tokenizer = AutoTokenizer.from_pretrained(MODELS['llama2-13b-chat'], use_fast=False, padding_side='left')
-print(f"Loaded helper model {time.time()-t1:.2f}s.")
+if 'atanasova_counterfactual' in TESTS or 'turpin' in TESTS or 'lanham' in TESTS:
+    with torch.no_grad():
+        helper_model = AutoModelForCausalLM.from_pretrained(MODELS['llama2-13b-chat'], torch_dtype=torch.float16, device_map="auto", token=True)
+    helper_tokenizer = AutoTokenizer.from_pretrained(MODELS['llama2-13b-chat'], use_fast=False, padding_side='left')
+    print(f"Loaded helper model {time.time()-t1:.2f}s.")
+else:
+    print(f"No need for helper model given the subselection of tests.")
 
 # print(lm_generate('I enjoy walking with my cute dog.', helper_model, helper_tokenizer, max_new_tokens=max_new_tokens))
 
@@ -158,27 +164,44 @@ if __name__ == '__main__':
     
     print("Done preparing data. Running test...")
     for k, formatted_sample, correct_answer, wrong_answer, image_path in tqdm(zip(range(len(formatted_samples)), formatted_samples, correct_answers, wrong_answers, image_paths)):
-        raw_image = Image.open(image_path) # read image
+        raw_image = Image.open(image_path).convert("RGB") # read image
         if c_task in MULT_CHOICE_DATA.keys():
             labels = LABELS['binary']
         elif c_task in OPEN_ENDED_DATA.keys():
             labels = None
         else:
             labels = LABELS[c_task]
-        # compute model accuracy post-hoc
-        inp_ask_for_prediction = prompt_answer_with_input(formatted_sample, c_task)
-        prediction = vlm_predict(inp_ask_for_prediction, raw_image, model, tokenizer, c_task, labels=labels)
+
+        t7 = time.time()
+        if "mplug" in model_name:
+            # compute model accuracy post-hoc
+            inp_ask_for_prediction = prompt_answer_with_input(formatted_sample, c_task)
+            prediction = vlm_predict(copy.deepcopy(inp_ask_for_prediction), raw_image, model, tokenizer, c_task, labels=labels)
+            # post-hoc explanation
+            input_pred_ask_for_expl = prompt_post_hoc_expl_with_input(formatted_sample, prediction, c_task)
+            input_pred_expl = vlm_generate(copy.deepcopy(input_pred_ask_for_expl), raw_image, model, tokenizer, max_new_tokens=max_new_tokens, repeat_input=True)
+
+            # for accuracy with CoT: first let the model generate the cot, then the answer.
+            input_ask_for_cot = prompt_cot_with_input(formatted_sample, c_task)
+            output_cot = vlm_generate(copy.deepcopy(input_ask_for_cot), raw_image, model, tokenizer, max_new_tokens=max_new_tokens, repeat_input=False, skip_special_tokens=True)
+            input_cot_ask_for_pred = prompt_answer_after_cot_with_input(output_cot, c_task, inputt=formatted_sample)
+            prediction_cot = vlm_predict(copy.deepcopy(input_cot_ask_for_pred), raw_image, model, tokenizer, c_task, labels=labels)
+        else:
+            # compute model accuracy post-hoc
+            inp_ask_for_prediction = prompt_answer_with_input(formatted_sample, c_task)
+            prediction = vlm_predict(inp_ask_for_prediction, raw_image, model, tokenizer, c_task, labels=labels)
+            # post-hoc explanation
+            input_pred_ask_for_expl = prompt_post_hoc_expl_with_input(formatted_sample, prediction, c_task)
+            input_pred_expl = vlm_generate(input_pred_ask_for_expl, raw_image, model, tokenizer, max_new_tokens=max_new_tokens, repeat_input=True)
+
+            # for accuracy with CoT: first let the model generate the cot, then the answer.
+            input_ask_for_cot = prompt_cot_with_input(formatted_sample, c_task)
+            input_cot = vlm_generate(input_ask_for_cot, raw_image, model, tokenizer, max_new_tokens=max_new_tokens, repeat_input=True)
+            input_cot_ask_for_pred = prompt_answer_after_cot_with_input(input_cot, c_task)
+            prediction_cot = vlm_predict(input_cot_ask_for_pred, raw_image, model, tokenizer, c_task, labels=labels)
+
         accuracy_sample = evaluate_prediction(prediction, correct_answer, c_task)
         accuracy += accuracy_sample
-        # post-hoc explanation
-        input_pred_ask_for_expl = prompt_post_hoc_expl_with_input(formatted_sample, prediction, c_task)
-        input_pred_expl = vlm_generate(input_pred_ask_for_expl, raw_image, model, tokenizer, max_new_tokens=max_new_tokens, repeat_input=True)
-
-        # for accuracy with CoT: first let the model generate the cot, then the answer.
-        input_ask_for_cot = prompt_cot_with_input(formatted_sample, c_task)
-        input_cot = vlm_generate(input_ask_for_cot, raw_image, model, tokenizer, max_new_tokens=max_new_tokens, repeat_input=True)
-        input_cot_ask_for_pred = prompt_answer_after_cot_with_input(input_cot, c_task)
-        prediction_cot = vlm_predict(input_cot, raw_image, model, tokenizer, c_task, labels=labels)
         accuracy_cot_sample = evaluate_prediction(prediction_cot, correct_answer, c_task)
         accuracy_cot += accuracy_cot_sample
 
@@ -187,7 +210,7 @@ if __name__ == '__main__':
             atanasova_counterfact, atanasova_counterfact_info = faithfulness_test_atanasova_etal_counterfact(formatted_sample, raw_image, prediction, model, tokenizer, c_task, helper_model, helper_tokenizer, labels)
         else: atanasova_counterfact, atanasova_counterfact_info = 0, 0
         if 'cc_shap-posthoc' in TESTS:
-            mm_score_post_hoc, mm_score_expl_post_hoc, score_post_hoc, dist_correl_ph, mse_ph, var_ph, kl_div_ph, js_div_ph, shap_plot_info_ph, tuple_shap_values_prediction = cc_shap_measure(inp_ask_for_prediction, prediction, input_pred_ask_for_expl, raw_image, model, tokenizer, c_task, tuple_shap_values_prediction=None, expl_type='post_hoc', max_new_tokens=max_new_tokens)
+            mm_score_post_hoc, mm_score_expl_post_hoc, score_post_hoc, dist_correl_ph, mse_ph, var_ph, kl_div_ph, js_div_ph, shap_plot_info_ph, tuple_shap_values_prediction = cc_shap_measure(copy.deepcopy(inp_ask_for_prediction), prediction, input_pred_ask_for_expl, raw_image, model, tokenizer, c_task, tuple_shap_values_prediction=None, expl_type='post_hoc', max_new_tokens=max_new_tokens)
         else: mm_score_post_hoc, mm_score_expl_post_hoc, score_post_hoc, dist_correl_ph, mse_ph, var_ph, kl_div_ph, js_div_ph, shap_plot_info_ph = 0, 0, 0, 0, 0, 0, 0, 0, 0
 
         # # CoT tests
@@ -198,7 +221,7 @@ if __name__ == '__main__':
             lanham_early, lanham_mistake, lanham_paraphrase, lanham_filler, lanham_early_info = faithfulness_test_lanham_etal(prediction_cot, input_cot, input_ask_for_cot, raw_image, model, tokenizer, c_task, helper_model, helper_tokenizer, labels, max_new_tokens=max_new_tokens)
         else: lanham_early, lanham_mistake, lanham_paraphrase, lanham_filler, lanham_early_info = 0, 0, 0, 0, 0
         if 'cc_shap-cot' in TESTS:
-            mm_score_cot, mm_score_expl_cot, score_cot, dist_correl_cot, mse_cot, var_cot, kl_div_cot, js_div_cot, shap_plot_info_cot, _ = cc_shap_measure(inp_ask_for_prediction, prediction, input_ask_for_cot, raw_image, model, tokenizer, c_task, tuple_shap_values_prediction, expl_type='cot', max_new_tokens=max_new_tokens)
+            mm_score_cot, mm_score_expl_cot, score_cot, dist_correl_cot, mse_cot, var_cot, kl_div_cot, js_div_cot, shap_plot_info_cot, _ = cc_shap_measure(copy.deepcopy(inp_ask_for_prediction), prediction, copy.deepcopy(input_ask_for_cot), raw_image, model, tokenizer, c_task, tuple_shap_values_prediction, expl_type='cot', max_new_tokens=max_new_tokens)
         else: mm_score_cot, mm_score_expl_cot, score_cot, dist_correl_cot, mse_cot, var_cot, kl_div_cot, js_div_cot, shap_plot_info_cot = 0, 0, 0, 0, 0, 0, 0, 0, 0
 
         # aggregate results
@@ -220,7 +243,7 @@ if __name__ == '__main__':
             "sample": formatted_sample,
             "correct_answer": correct_answer,
             "post-hoc": {
-                "inp_pred_expl": input_pred_expl, # input, prediction, expl
+                # "inp_pred_expl": input_pred_expl, # input, prediction, expl
                 "prediction": prediction,
                 "accuracy": accuracy_sample,
                 "shap_plot_info_post_hoc": shap_plot_info_ph,
@@ -264,7 +287,7 @@ if __name__ == '__main__':
         }
 
         # write results every 10 samples
-        if (k+1) % 10 == 0:
+        if (k+1) % 1 == 0:
             print(f"Ran {TESTS} on {c_task} {k+1} samples with model {model_name}. Reporting accuracy and faithfulness percentage.\n")
             print(f"Accuracy %                       : {accuracy*100/(k+1):.2f}  ")
             print(f"Atanasova Counterfact %          : {atanasova_counterfact_count*100/(k+1):.2f}  ")
@@ -280,6 +303,9 @@ if __name__ == '__main__':
             print(f"T-SHAP expl post-hoc mean score %: {mm_shap_expl_post_hoc_sum/(k+1)*100:.2f}  ")
             print(f"T-SHAP CoT mean score %          : {mm_shap_cot_sum/(k+1)*100:.2f}  ")
             print(f"T-SHAP expl CoT mean score %     : {mm_shap_expl_cot_sum/(k+1)*100:.2f}  ")
+            c = time.time()-t7
+        print(f"A step ran for {c // 60 % 60:.2f} minutes, {c % 60:.2f} seconds.")
+
         if save_json and (k+1) % 10 == 0:
             # save results to a json file, make results_json directory if it does not exist
             if not os.path.exists('results_json'):

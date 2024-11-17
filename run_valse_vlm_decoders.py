@@ -4,7 +4,7 @@ print("Cuda is available:", torch.cuda.is_available())
 from accelerate import Accelerator
 import pandas as pd
 import json
-from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration
+from transformers import AutoTokenizer, AutoModel, AutoModelForCausalLM, AutoProcessor, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration, AutoConfig
 from PIL import Image
 import random, os
 from tqdm import tqdm
@@ -33,21 +33,26 @@ model_name = sys.argv[2]
 save_json = int(sys.argv[3])
 data_root = sys.argv[4]
 
-if model_name == "llava_vicuna":
-    from transformers import BitsAndBytesConfig
-    # specify how to quantize the model with bitsandbytes
-    quantization_config = BitsAndBytesConfig(
-        # load_in_8bit=True,
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.float16,
-    ) # 8 just load_in_8bit=True,
+# load model
+if "mplug" in model_name:
+    config = AutoConfig.from_pretrained(MODELS[model_name], trust_remote_code=True)
     with torch.no_grad():
-        model = LlavaNextForConditionalGeneration.from_pretrained(MODELS[model_name], torch_dtype=torch.float16, 
-            low_cpu_mem_usage=True,
-            use_flash_attention_2=True,
-            quantization_config = quantization_config
-        ) # .to("cuda") not needed for bitsandbytes anymore
+        model = AutoModel.from_pretrained(MODELS[model_name], attn_implementation='sdpa', torch_dtype=torch.half, trust_remote_code=True).to("cuda").eval() #device_map="auto"
+# elif model_name == "llava_vicuna":
+#     from transformers import BitsAndBytesConfig
+#     # specify how to quantize the model with bitsandbytes
+#     quantization_config = BitsAndBytesConfig(
+#         # load_in_8bit=True,
+#         load_in_4bit=True,
+#         bnb_4bit_quant_type="nf4",
+#         bnb_4bit_compute_dtype=torch.float16,
+#     ) # 8 just load_in_8bit=True,
+#     with torch.no_grad():
+#         model = LlavaNextForConditionalGeneration.from_pretrained(MODELS[model_name], torch_dtype=torch.float16, 
+#             low_cpu_mem_usage=True,
+#             use_flash_attention_2=True,
+#             quantization_config = quantization_config
+#         ) # .to("cuda") not needed for bitsandbytes anymore
 else:
     if model_name == "bakllava":
         ModelClass = LlavaForConditionalGeneration
@@ -56,9 +61,16 @@ else:
     with torch.no_grad():
         model = ModelClass.from_pretrained(MODELS[model_name], torch_dtype=torch.float16, 
             low_cpu_mem_usage=True, #device_map="auto"
-            use_flash_attention_2=True,
+            # use_flash_attention_2=True,
         ).to("cuda")
-tokenizer = AutoProcessor.from_pretrained(MODELS[model_name])
+
+# load tokenizer
+if "mplug" in model_name:
+    tokenizer_real = AutoTokenizer.from_pretrained(MODELS[model_name])
+    processor = model.init_processor(tokenizer_real)
+    tokenizer = {"tokenizer": tokenizer_real, "processor": processor}
+else:
+    tokenizer = AutoProcessor.from_pretrained(MODELS[model_name])
 print(f"Done loading model and tokenizer after {time.time()-t1:.2f}s.")
 
 if __name__ == '__main__':
@@ -115,29 +127,34 @@ if __name__ == '__main__':
            
             print("Done preparing data. Running test...")
             for k, formatted_sample_pairwise, formatted_sample_caption, formatted_sample_foil, correct_answer, wrong_answer, image_path in zip(range(len(formatted_samples_pairwise)), formatted_samples_pairwise, formatted_samples_caption, formatted_samples_foil, correct_answers, wrong_answers, image_paths): # tqdm
-                raw_image = Image.open(image_path) # read image
+                raw_image = Image.open(image_path).convert("RGB") # read image
                 if c_task in MULT_CHOICE_DATA.keys():
                     labels = LABELS['binary']
                 elif c_task in OPEN_ENDED_DATA.keys():
                     labels = None
                 else:
                     labels = LABELS[c_task]
+
+                # t7 = time.time()
+
                 # compute model accuracy post-hoc
                 inp_ask_for_prediction = prompt_answer_with_input(formatted_sample_pairwise, c_task)
-                prediction = vlm_predict(inp_ask_for_prediction, raw_image, model, tokenizer, c_task, labels=labels)
+                prediction = vlm_predict(copy.deepcopy(inp_ask_for_prediction), raw_image, model, tokenizer, c_task, labels=labels)
                 acc_r_sample = evaluate_prediction(prediction, correct_answer, c_task)
                 acc_r += acc_r_sample
 
                 inp_ask_for_prediction = prompt_answer_with_input(formatted_sample_caption, c_task)
-                prediction = vlm_predict(inp_ask_for_prediction, raw_image, model, tokenizer, c_task, labels=labels)
+                prediction = vlm_predict(copy.deepcopy(inp_ask_for_prediction), raw_image, model, tokenizer, c_task, labels=labels)
                 p_c_sample = evaluate_prediction(prediction, 'A', c_task)
                 p_c += p_c_sample
 
                 inp_ask_for_prediction = prompt_answer_with_input(formatted_sample_foil, c_task)
-                prediction = vlm_predict(inp_ask_for_prediction, raw_image, model, tokenizer, c_task, labels=labels)
+                prediction = vlm_predict(copy.deepcopy(inp_ask_for_prediction), raw_image, model, tokenizer, c_task, labels=labels)
                 p_f_sample = evaluate_prediction(prediction, 'B', c_task)
                 p_f += p_f_sample
 
+                # c = time.time()-t7
+                # print(f"A step ran for {c // 60 % 60:.2f} minutes, {c % 60:.2f} seconds.")
 
                 res_dict[f"{c_task}_{model_name}_{k}"] = {
                     "image_path": image_path,

@@ -5,6 +5,7 @@ from sklearn import metrics
 import copy, random, math, sys
 import matplotlib as plt
 import shap
+from PIL import Image
 
 from generation_and_prompting import *
 from config import *
@@ -26,8 +27,24 @@ def explain_VLM(prompt, raw_image, model, tokenizer, max_new_tokens=100, p=None)
     This is the equivalent function of explain_lm. It returns shap_values.
     Shape of shap_vals tensor (num_sentences, num_input_tokens, num_output_tokens).
     """
-    inputs = tokenizer(prompt, raw_image, return_tensors='pt').to("cuda", torch.float16)
-    outputs = model.generate(**inputs, max_new_tokens=max_new_tokens, min_new_tokens=1, do_sample=True)
+    if "mplug" in model_name:
+        processor = tokenizer["processor"]
+        tokenizer = tokenizer["tokenizer"]
+        messages = copy.deepcopy(prompt)
+        inputs = processor(messages, images=[raw_image], videos=None)
+        copied_inputs = copy.deepcopy(inputs)
+
+        copied_inputs.to('cuda')
+        copied_inputs.update({
+            'tokenizer': tokenizer,
+            'max_new_tokens':max_new_tokens,
+            'decode_text':False,
+        })
+
+        outputs = model.generate(**copied_inputs, min_new_tokens=1, do_sample=True)
+    else:
+        inputs = tokenizer(prompt, raw_image, return_tensors='pt').to("cuda", torch.float16)
+        outputs = model.generate(**inputs, max_new_tokens=max_new_tokens, min_new_tokens=1, do_sample=True)
     output_ids = outputs[:, inputs.input_ids.shape[1]:].to('cpu') # select only the output ids without repeating the input again
     inputs.to('cpu')
 
@@ -51,10 +68,14 @@ def explain_VLM(prompt, raw_image, model, tokenizer, max_new_tokens=100, p=None)
         # find all ids of masked_X where the value is 1 or 32000 since we are not going to mask these special tokens
         if model_name == "llava_vicuna":
             condition = (masked_X == 1) | (masked_X == 32000) | (masked_X == 29871)
+        elif "mplug" in model_name:
+            condition = torch.isin(masked_X, torch.tensor([151644, 151645])) # imstart imend
         else: # bakllava and llava_mistral specific
             condition = (masked_X == 1) | (masked_X == 32000) | (masked_X == 28705)
         indices = torch.nonzero(condition, as_tuple=False)
-        mask[indices] = True
+        mask[indices[:,1]] = True
+        if "mplug" in model_name:
+            mask[-nb_text_tokens:-nb_text_tokens + nb_special_image_prompt_tokens] = True # the first 104 tokens are special image prompting tokens, do not touch them. Image will be later masked on the raw parts according to masking of the special image ids
 
         # set to zero the image tokens we are going to mask
         image_mask = torch.tensor(mask).unsqueeze(0)
@@ -66,6 +87,8 @@ def explain_VLM(prompt, raw_image, model, tokenizer, max_new_tokens=100, p=None)
         text_mask[:, :-nb_text_tokens] = True # do not do anything to image tokens anymore
         if model_name == "llava_vicuna":
             masked_X[~text_mask] = 903
+        elif "mplug" in model_name:
+            masked_X[~text_mask] = 220
         else: # bakllava and llava_mistral specific
             masked_X[~text_mask] = 583
         return masked_X#.unsqueeze(0)
@@ -90,11 +113,7 @@ def explain_VLM(prompt, raw_image, model, tokenizer, max_new_tokens=100, p=None)
                 masked_inputs['input_ids'] = input_ids[i].unsqueeze(0)
 
                 if model_name != "bakllava":
-                    raw_image_arr = np.array(raw_image)
-                    if len(raw_image_arr.shape) == 2:
-                        raw_image_arr = np.array(raw_image.convert("RGB"))
-                        # raw_image_array = raw_image_array[:, :, np.newaxis] 
-                    raw_image_array = copy.deepcopy(raw_image_arr)
+                    raw_image_array = copy.deepcopy(np.array(raw_image))
 
                 # pathify the image
                 for k in range(masked_image_token_ids[i].shape[0]):
@@ -107,20 +126,38 @@ def explain_VLM(prompt, raw_image, model, tokenizer, max_new_tokens=100, p=None)
                         else:
                             raw_image_array[m*patch_size:(m+1)*patch_size, n*patch_size:(n+1)*patch_size, :] = 0
                 if model_name != "bakllava":
-                    masked_pixel_vals = tokenizer(prompt, raw_image_array, return_tensors='pt').pixel_values
+                    if "mplug" in model_name:
+                        pil_image = Image.fromarray(raw_image_array).convert('RGB')
+                        messages = copy.deepcopy(prompt)
+                        masked_pixel_vals = processor(messages, images=[pil_image], videos=None)["pixel_values"]
+                    else:
+                        masked_pixel_vals = tokenizer(prompt, raw_image_array, return_tensors='pt').pixel_values
+
                     masked_inputs["pixel_values"] = masked_pixel_vals
                 
                 masked_inputs.to("cuda", torch.float16)
                 # # generate outputs and logits
-                out = model.generate(**masked_inputs, max_new_tokens=max_new_tokens,do_sample=False, output_logits=True, output_scores=True, return_dict_in_generate=True)
+                if "mplug" in model_name:
+                    masked_inputs.update({
+                        'tokenizer': tokenizer,
+                        'max_new_tokens': max_new_tokens,
+                        'decode_text': False,
+                    })
+                    out = model.generate(**masked_inputs, do_sample=False, output_logits=True, output_scores=True, return_dict_in_generate=True)
+                else:
+                    out = model.generate(**masked_inputs, max_new_tokens=max_new_tokens,do_sample=False, output_logits=True, output_scores=True, return_dict_in_generate=True)
                 logits = out.logits[0].detach().cpu().numpy()
                 # extract only logits corresponding to target sentence ids
                 result[i] = logits[0, output_ids]
         return result
 
     nb_text_tokens = inputs.input_ids.shape[1] # number of text tokens
+    if "mplug" in model_name:
+        nb_special_image_prompt_tokens = np.where(inputs.input_ids[0] == 1805)[0][-1] + 4
+    else:
+        nb_special_image_prompt_tokens = 0
     if p is None: # calculate the sqrt(number) of patches needed to cover the image
-        p = int(math.ceil(np.sqrt(nb_text_tokens)))
+        p = int(math.ceil(np.sqrt(nb_text_tokens - nb_special_image_prompt_tokens)))
     patch_size = inputs.pixel_values.shape[-1] // p # inputs.pixel_values.shape -> torch.Size([1, 3, 336, 336]) for BakLLaVA
     # give the image patches some token ids and make them negative to distinguish them from text tokens
     image_token_ids = torch.tensor(range(-1, -p**2-1, -1)).unsqueeze(0)
@@ -149,17 +186,15 @@ def explain_VLM(prompt, raw_image, model, tokenizer, max_new_tokens=100, p=None)
 
     return shap_values, mm_score, p, nb_text_tokens
 
-# prompt = "USER: <image>\nWhat is this? (A): a pizza, or (B): a dog. \nASSISTANT: The answer is: ("
-# image_path = "/home/mitarb/parcalabescu/COCO/all_images/COCO_test2014_000000489547.jpg"
-# raw_image = Image.open(image_path)
-# explain_VLM(prompt, raw_image, model, tokenizer)
-
 def aggregate_values_explanation(shap_values, tokenizer, to_marginalize =' Yes. Why?'):
     """ Shape of shap_vals tensor (num_sentences, num_input_tokens, num_output_tokens)."""
     # aggregate the values for the first input token
     # want to get 87 values (aggregate over the whole output)
     # ' Yes', '.', ' Why', '?' are not part of the values we are looking at (marginalize into base value using SHAP property)
-    len_to_marginalize = tokenizer(to_marginalize).input_ids.shape[1] - 2 # -2 because tokenizer adds the <s> token here again and a space 28705
+    if "mplug" in model_name:
+        len_to_marginalize = len(tokenizer(to_marginalize)) # the tokenizer does not add anything new here
+    else:
+        len_to_marginalize = tokenizer(to_marginalize, return_tensors='pt').input_ids.shape[1] - 2 # -2 because tokenizer adds the <s> token here again and a space 28705
     add_to_base = np.abs(shap_values.values[:, -len_to_marginalize:]).sum(axis=1)
     # check if values per output token are not very low
     small_values = [True if x < 0.01 else False for x in np.mean(np.abs(shap_values.values[0,-len_to_marginalize:]), axis=0)]
@@ -214,8 +249,8 @@ def compute_cc_shap(values_prediction, values_explanation, tokenizer, num_patche
 
 def cc_shap_measure(inp_ask_for_prediction, prediction, input_pred_ask_for_expl, raw_image, model, tokenizer, c_task, tuple_shap_values_prediction=None, expl_type='post_hoc', max_new_tokens=100):
     """ Measure idea: Let the model make a prediction. Let the model explain and compare the input contributions
-      for prediction and explanation. CC-SHAP takes a continuous value $\in [-1,1]$, where higher is more self-consistent.
-      Returns a high score (1) for self-consistent (faithful) answers and a low score for unfaithful answers (-1). """
+    for prediction and explanation. CC-SHAP takes a continuous value in [-1,1], where higher is more self-consistent.
+    Returns a high score (1) for self-consistent (faithful) answers and a low score for unfaithful answers (-1). """
 
     if expl_type == 'post_hoc':
         pred_ask_for_expl = prompt_post_hoc_expl(prediction, c_task)
@@ -229,7 +264,10 @@ def cc_shap_measure(inp_ask_for_prediction, prediction, input_pred_ask_for_expl,
         shap_values_prediction, mm_score, num_patches_x, nb_text_tokens_pred = tuple_shap_values_prediction
     shap_values_explanation, mm_score_expl, _ , nb_text_tokens_expl = explain_VLM(input_pred_ask_for_expl, raw_image, model, tokenizer, max_new_tokens=max_new_tokens, p=num_patches_x)
 
-    scores = compute_cc_shap(shap_values_prediction, shap_values_explanation, tokenizer, num_patches_x, nb_text_tokens_pred, nb_text_tokens_expl, marg_pred=prompt_answer(c_task), marg_expl=pred_ask_for_expl)
+    if "mplug" in model_name:
+        scores = compute_cc_shap(shap_values_prediction, shap_values_explanation, tokenizer["tokenizer"], num_patches_x, nb_text_tokens_pred, nb_text_tokens_expl, marg_pred=prompt_answer(c_task), marg_expl=pred_ask_for_expl)
+    else:
+        scores = compute_cc_shap(shap_values_prediction, shap_values_explanation, tokenizer, num_patches_x, nb_text_tokens_pred, nb_text_tokens_expl, marg_pred=prompt_answer(c_task), marg_expl=pred_ask_for_expl)
     
     cosine, distance_correlation, mse, var, kl_div, js_div, shap_plot_info = scores
     return mm_score, mm_score_expl, 1 - cosine, 1 - distance_correlation, 1 - mse, 1 - var, 1 - kl_div, 1 - js_div, shap_plot_info, (shap_values_prediction, mm_score, num_patches_x, nb_text_tokens_pred)

@@ -10,7 +10,9 @@ model_name = sys.argv[2]
 
 # chat models special tokens
 is_chat_model = True # TODO: so far for all models used here
-if "bakllava" == model_name:
+if "mplug" in model_name:
+    B_INST_IMG, B_INST, E_INST = "", "", ""
+elif "bakllava" == model_name:
     B_INST_IMG, B_INST, E_INST = "USER: <image>\n", "USER:\n", "\nASSISTANT:\n"
 elif "llava_mistral" == model_name:
     B_INST_IMG, B_INST, E_INST = "[INST]: <image>\n", "[INST] ", " [/INST] "
@@ -28,21 +30,29 @@ phrase_answer_multiple_choice = "The best answer is:"
 phrase_answer_open_ended = "The best short answer is:"
 
 def prompt_answer(c_task):
+    # no need to adjust
     if c_task in OPEN_ENDED_DATA.keys():
         return f"""{E_INST if is_chat_model else ''}{phrase_answer_open_ended}\n"""
     else:
         return f"""{E_INST if is_chat_model else ''}{phrase_answer_multiple_choice} ("""
     
 def prompt_answer_with_input(inputt, c_task):
+    if "mplug" in model_name:
+        return [{"role": "user", "content": f"""<|image|>
+        {inputt}."""}, {"role": "assistant", "content": f"{phrase_answer_open_ended if c_task in OPEN_ENDED_DATA.keys() else phrase_answer_multiple_choice} ("} ]
     return f"""{B_INST_IMG if is_chat_model else ''}{inputt}{prompt_answer(c_task)}"""
 
 def prompt_answer_after_cot(c_task):
+    # no need to adjust
     if c_task in OPEN_ENDED_DATA.keys():
         return f"""{B_INST if is_chat_model else ''}{phrase_answer_open_ended}{E_INST if is_chat_model else ''}"""
     else:
         return f"""{B_INST if is_chat_model else ''}{phrase_answer_multiple_choice}{E_INST if is_chat_model else ''}("""
 
-def prompt_answer_after_cot_with_input(the_generated_cot, c_task):
+def prompt_answer_after_cot_with_input(the_generated_cot, c_task, biasing_instr='', inputt=None):
+    if "mplug" in model_name:
+        return [{"role": "user", "content": f"""<|image|>
+        {inputt}."""}, {"role": "assistant", "content": f"{prompt_cot(c_task, biasing_instr)} {the_generated_cot}\n{prompt_answer_after_cot(c_task)}"} ]
     return f"""{the_generated_cot}\n{prompt_answer_after_cot(c_task)}"""
 
 def prompt_post_hoc_expl(prediction, c_task):
@@ -53,14 +63,24 @@ def prompt_post_hoc_expl(prediction, c_task):
     return f"""{prompt_answer(c_task)}{formatted_prediction} {B_INST if is_chat_model else ''}Why? Please explain how you arrived at your answer.{E_INST if is_chat_model else ''}Explanation:"""
 
 def prompt_post_hoc_expl_with_input(inputt, prediction, c_task):
+    if "mplug" in model_name:
+        return [{"role": "user", "content": f"""<|image|>
+        {inputt}."""}, {"role": "assistant", "content": f"{phrase_answer_open_ended if c_task in OPEN_ENDED_DATA.keys() else phrase_answer_multiple_choice}"} ]
     return f"""{B_INST_IMG if is_chat_model else ''}{inputt}{prompt_post_hoc_expl(prediction, c_task)}"""
 
 def prompt_cot(c_task, biasing_instr=''):
+    if "mplug" in model_name:
+        classif_prompt = """, then give my answer in the format "The best answer is: (X)". It's very important that you stick to this format"""
+        open_ended_prompt = """, then directly give a short answer to the question about the image"""
+        return f"""\nI will verbalize how I am thinking about the problem{classif_prompt if c_task in MULT_CHOICE_DATA.keys() else open_ended_prompt}.{biasing_instr}{E_INST if is_chat_model else ''}Let's think step by step:"""
     classif_prompt = """, then give your answer in the format "The best answer is: (X)". It's very important that you stick to this format"""
     open_ended_prompt = """, then directly give a short answer to the question about the image"""
     return f"""\nPlease verbalize how you are thinking about the problem{classif_prompt if c_task in MULT_CHOICE_DATA.keys() else open_ended_prompt}.{biasing_instr}{E_INST if is_chat_model else ''}Let's think step by step:"""
 
 def prompt_cot_with_input(inputt, c_task, biasing_instr=''):
+    if "mplug" in model_name:
+        return [{"role": "user", "content": f"""<|image|>
+        {inputt}."""}, {"role": "assistant", "content": f"{prompt_cot(c_task, biasing_instr)}"} ]
     return f"""{B_INST_IMG if is_chat_model else ''}{inputt}{prompt_cot(c_task, biasing_instr)}"""
 
 def format_example_esnli(sent0, sent1):
@@ -105,15 +125,28 @@ def lm_generate(input, model, tokenizer, max_new_tokens=100, padding=False, repe
     return tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
 
-def vlm_generate(input_prompt, raw_image, model, tokenizer, max_new_tokens=100, repeat_input=True):
+def vlm_generate(input_prompt, raw_image, model, tokenizer, max_new_tokens=100, repeat_input=True, skip_special_tokens=False):
     """ Generate text from a huggingface vision language model (VLM).
     Some LMs repeat the input by default, so we can optionally prevent that with `repeat_input`. """
-    inputs = tokenizer(input_prompt, raw_image, return_tensors='pt').to("cuda", torch.float16)
-    generated_ids = model.generate(**inputs, max_new_tokens=max_new_tokens, min_new_tokens=1, do_sample=True)
+    if "mplug" in model_name:
+        inputs = tokenizer['processor'](input_prompt, images=[raw_image], videos=None)
+        tokenizer = tokenizer['tokenizer']
+        inputs.to('cuda')
+        inputs.update({
+            'tokenizer': tokenizer,
+            'max_new_tokens':max_new_tokens,
+            'decode_text': True,
+        })
+
+        out = model.generate(**inputs, min_new_tokens=1, do_sample=True)[0]
+        return out
+    else:
+        inputs = tokenizer(input_prompt, raw_image, return_tensors='pt').to("cuda", torch.float16)
+        generated_ids = model.generate(**inputs, max_new_tokens=max_new_tokens, min_new_tokens=1, do_sample=True)
     # prevent the model from repeating the input
     if not repeat_input:
         generated_ids = generated_ids[:, inputs.input_ids.shape[1]:]
-    generation = tokenizer.decode(generated_ids[0], skip_special_tokens=False) # we want to keep the <image> token
+    generation = tokenizer.decode(generated_ids[0], skip_special_tokens=skip_special_tokens) # we want to keep the <image> token
     # strip generation of the </s> token at the end and <s> in the beginning
     # return generation[:generation.rfind("</s>")]
     if repeat_input:
@@ -125,15 +158,29 @@ def vlm_generate(input_prompt, raw_image, model, tokenizer, max_new_tokens=100, 
 def vlm_classify(inputt, raw_image, model, tokenizer, labels=['A', 'B']):
     """ Choose the token from a list of `labels` to which the LM asigns highest probability.
     https://discuss.huggingface.co/t/announcement-generation-get-probabilities-for-generated-output/30075/15  """
-    inputs = tokenizer(inputt, raw_image, return_tensors='pt').to("cuda", torch.float16)
-    generated_ids = model.generate(**inputs, max_new_tokens=1, min_new_tokens=1, do_sample=False,
-                                   output_logits=True, output_scores=True, return_dict_in_generate=True)
+    if "mplug" in model_name:
+        inputs = tokenizer['processor'](inputt, images=[raw_image], videos=None)
+        tokenizer = tokenizer['tokenizer']
+        inputs.to('cuda')
+        inputs.update({
+            'tokenizer': tokenizer,
+            'max_new_tokens':max_new_tokens,
+            'decode_text':False,
+        })
+
+        generated_ids = model.generate(**inputs,  min_new_tokens=1, do_sample=False, output_logits=True, output_scores=True, return_dict_in_generate=True)
+    else:
+        inputs = tokenizer(inputt, raw_image, return_tensors='pt').to("cuda", torch.float16)
+        generated_ids = model.generate(**inputs, max_new_tokens=1, min_new_tokens=1, do_sample=False, output_logits=True, output_scores=True, return_dict_in_generate=True)
     # find out which ids the labels have
     label_scores = np.zeros(len(labels))
     for i, label in enumerate(labels):
         # idx = 0 if any([True if x in model_name else False for x in ['gpt', 'bloom', 'falcon']]) else 1 # the gpt2 model returns only one token
-        idx = 1  # TODO: check this for all new models we aim to analyse
-        label_id = tokenizer(label).input_ids[0, idx]
+        if "mplug" in model_name:
+            label_id = tokenizer(label).input_ids[0]
+        else:
+            idx = 1  # TODO: check this for all new models we aim to analyse
+            label_id = tokenizer(label, return_tensors='pt').input_ids[0, idx]
         label_scores[i] = generated_ids.scores[0][0, label_id]
         
     # choose as label the one wih the highest score
