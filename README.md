@@ -1,18 +1,18 @@
 # CC-SHAP for VLMs 🖼️
-Official code implementation for the paper "Do Vision &amp; Language Decoders use Images and Text equally? How Self-consistent are their Explanations?" https://arxiv.org/abs/2404.18624
+Official code implementation for the paper "Do Vision &amp; Language Decoders use Images and Text equally? How Self-consistent are their Explanations?" accepted at ICLR 2025! 🙌 https://openreview.net/forum?id=lCasyP21Bf
 
-This is follow-up work building on the paper "On Measuring Faithfulness of Natural Language Explanations" https://arxiv.org/abs/2311.07466  that developed CC-SHAP and applied it to LLMs 📃.
+This is follow-up work building on the paper "On Measuring Faithfulness of Natural Language Explanations" https://aclanthology.org/2024.acl-long.329/ that developed CC-SHAP and applied it to LLMs 📃.
 Now, we extend to VLMs 🖼️+📃.
 
 ## Cite
 ```bibtex
-@misc{parcalabescu2024vision,
-  title={Do Vision \& Language Decoders use Images and Text equally? How Self-consistent are their Explanations?},
-  author={Parcalabescu, Letitia and Frank, Anette},
-  journal={arXiv preprint arXiv:2404.18624},
-  year={2024},
-  url = {https://arxiv.org/abs/2404.18624},
-  abstract = "Vision and language models (VLMs) are currently the most generally performant architectures on multimodal tasks. Next to their predictions, they can also produce explanations, either in post-hoc or CoT settings. However, it is not clear how much they use the vision and text modalities when generating predictions or explanations. In this work, we investigate if VLMs rely on modalities differently when generating explanations as opposed to when they provide answers. We also evaluate the self-consistency of VLM decoders in both post-hoc and CoT explanation settings, by extending existing tests and measures to VLM decoders. We find that VLMs are less self-consistent than LLMs. The text contributions in VL decoders are much larger than the image contributions across all measured tasks. And the contributions of the image are significantly larger for explanation generations than for answer generation. This difference is even larger in CoT compared to the post-hoc explanation setting. We also provide an up-to-date benchmarking of state-of-the-art VL decoders on the VALSE benchmark, which to date focused only on VL encoders. We find that VL decoders are still struggling with most phenomena tested by VALSE.",
+@inproceedings{
+parcalabescu2025do,
+title={Do Vision \& Language Decoders use Images and Text equally? How Self-consistent are their Explanations?},
+author={Letitia Parcalabescu and Anette Frank},
+booktitle={The Thirteenth International Conference on Learning Representations},
+year={2025},
+url={https://openreview.net/forum?id=lCasyP21Bf}
 }
 ```
 
