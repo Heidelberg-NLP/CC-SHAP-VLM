@@ -6,8 +6,7 @@ Now, we extend to VLMs 🖼️+📃.
 
 ## Cite
 ```bibtex
-@inproceedings{
-parcalabescu2025do,
+@inproceedings{parcalabescu2025do,
 title={Do Vision \& Language Decoders use Images and Text equally? How Self-consistent are their Explanations?},
 author={Letitia Parcalabescu and Anette Frank},
 booktitle={The Thirteenth International Conference on Learning Representations},
