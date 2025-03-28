@@ -16,13 +16,21 @@ url={https://openreview.net/forum?id=lCasyP21Bf}
 ```
 
 ```bibtex
-@article{parcalabescu2023measuring,
-  title={On measuring faithfulness or self-consistency of natural language explanations},
-  author={Parcalabescu, Letitia and Frank, Anette},
-  journal={arXiv preprint arXiv:2311.07466},
-  year={2023},
-  url      = {https://arxiv.org/abs/2311.07466},
-  abstract = "Large language models (LLMs) can explain their own predictions, through post-hoc or Chain-of-Thought (CoT) explanations. However the LLM could make up reasonably sounding explanations that are unfaithful to its underlying reasoning. Recent work has designed tests that aim to judge the faithfulness of either post-hoc or CoT explanations. In this paper we argue that existing faithfulness tests are not actually measuring faithfulness in terms of the models' inner workings, but only evaluate their self-consistency on the output level. The aims of our work are two-fold. i) We aim to clarify the status of existing faithfulness tests in terms of model explainability, characterising them as self-consistency tests instead. This assessment we underline by constructing a Comparative Consistency Bank for self-consistency tests that for the first time compares existing tests on a common suite of 11 open-source LLMs and 5 datasets -- including ii) our own proposed self-consistency measure CC-SHAP. CC-SHAP is a new fine-grained measure (not test) of LLM self-consistency that compares a model's input contributions to answer prediction and generated explanation. With CC-SHAP, we aim to take a step further towards measuring faithfulness with a more interpretable and fine-grained method. Code available at https://github.com/Heidelberg-NLP/CC-SHAP", 
+@inproceedings{parcalabescu-frank-2024-measuring,
+    title = "On Measuring Faithfulness or Self-consistency of Natural Language Explanations",
+    author = "Parcalabescu, Letitia  and
+      Frank, Anette",
+    editor = "Ku, Lun-Wei  and
+      Martins, Andre  and
+      Srikumar, Vivek",
+    booktitle = "Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)",
+    month = aug,
+    year = "2024",
+    address = "Bangkok, Thailand",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2024.acl-long.329/",
+    doi = "10.18653/v1/2024.acl-long.329",
+    pages = "6048--6089",
 }
 ```
 
