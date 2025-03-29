@@ -36,7 +36,7 @@ Now, we extend to VLMs 🖼️+📃.
 
 ## Installation and running
 1. `conda create -n <env-name> python=3.12.1`
-2. `pip install -r requirements_pip-mplug-owl3.txt` for installing the required packages with pip. This was used to run the mPLUG-Owl3 experiments and should work for the first three models too.
+2. `pip install -r requirements_pip-mplug-owl3.txt` for installing the required packages with pip. This was used to run the mPLUG-Owl3 experiments but unfortunately `transformers` broke backwards compatibility.
 The experiments for the other 3 models were run with the installation from `conda create --name <env> --file requirements_conda.txt` (there is also a pip export for them in `requirements_pip.txt`).
 3. Download the data from their respective repositories and change the paths in `config.py` accordingly. Data repositories:
   * VALSE 💃: https://github.com/Heidelberg-NLP/VALSE
