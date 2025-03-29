@@ -2,7 +2,6 @@ import time, sys
 import torch
 print("Cuda is available:", torch.cuda.is_available())
 from accelerate import Accelerator
-import pandas as pd
 import json
 from transformers import AutoTokenizer, AutoModel, AutoModelForCausalLM, AutoProcessor, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration, AutoConfig
 from PIL import Image
@@ -30,8 +29,9 @@ t1 = time.time()
 
 c_task = sys.argv[1]
 model_name = sys.argv[2]
-save_json = int(sys.argv[3])
-data_root = sys.argv[4]
+num_samples = int(sys.argv[3])
+save_json = int(sys.argv[4])
+data_root = sys.argv[5]
 
 # load model
 if "mplug" in model_name:
@@ -61,7 +61,7 @@ else:
     with torch.no_grad():
         model = ModelClass.from_pretrained(MODELS[model_name], torch_dtype=torch.float16, 
             low_cpu_mem_usage=True, #device_map="auto"
-            # use_flash_attention_2=True,
+            use_flash_attention_2=True,
         ).to("cuda")
 
 # load tokenizer
@@ -81,7 +81,7 @@ if __name__ == '__main__':
             formatted_samples_pairwise, formatted_samples_caption, formatted_samples_foil = [], [], []
             correct_answers, wrong_answers, image_paths = [], [], []
             acc_r, p_c, p_f = 0, 0, 0
-            count = 0
+            count, t_shap_c_sum, t_shap_f_sum, t_shap_r_sum = 0, 0, 0, 0
             print("Preparing data...")
             # read the valse data from the json files
             images_path = f"{data_root}{MULT_CHOICE_DATA[c_task][0]}"
@@ -101,9 +101,9 @@ if __name__ == '__main__':
                         test_sentences = [foil["caption"], confounder["caption"]]
                     else:
                         if c_task == 'plurals':
-                            test_sentences = [foil["caption"][0], foil["foils"][0]]
+                            test_sentences = [foil["caption"][0], foil["foil"][0]]
                         else:
-                            test_sentences = [foil["caption"], foil["foils"][0]]
+                            test_sentences = [foil["caption"], foil["foil"][0]]
 
                     # shuffle the order of caption and foil such that the correct answer is not always A
                     if random.choice([0, 1]) == 0:
@@ -127,34 +127,35 @@ if __name__ == '__main__':
            
             print("Done preparing data. Running test...")
             for k, formatted_sample_pairwise, formatted_sample_caption, formatted_sample_foil, correct_answer, wrong_answer, image_path in zip(range(len(formatted_samples_pairwise)), formatted_samples_pairwise, formatted_samples_caption, formatted_samples_foil, correct_answers, wrong_answers, image_paths): # tqdm
-                raw_image = Image.open(image_path).convert("RGB") # read image
+                raw_image = Image.open(image_path) # read image
                 if c_task in MULT_CHOICE_DATA.keys():
                     labels = LABELS['binary']
                 elif c_task in OPEN_ENDED_DATA.keys():
                     labels = None
                 else:
                     labels = LABELS[c_task]
-
-                # t7 = time.time()
-
                 # compute model accuracy post-hoc
                 inp_ask_for_prediction = prompt_answer_with_input(formatted_sample_pairwise, c_task)
                 prediction = vlm_predict(copy.deepcopy(inp_ask_for_prediction), raw_image, model, tokenizer, c_task, labels=labels)
                 acc_r_sample = evaluate_prediction(prediction, correct_answer, c_task)
                 acc_r += acc_r_sample
+                _, mm_score, _, _ = explain_VLM(copy.deepcopy(inp_ask_for_prediction), raw_image, model, tokenizer, max_new_tokens=1)
+                t_shap_r_sum += mm_score
 
-                inp_ask_for_prediction = prompt_answer_with_input(formatted_sample_caption, c_task)
-                prediction = vlm_predict(copy.deepcopy(inp_ask_for_prediction), raw_image, model, tokenizer, c_task, labels=labels)
-                p_c_sample = evaluate_prediction(prediction, 'A', c_task)
-                p_c += p_c_sample
+                # inp_ask_for_prediction = prompt_answer_with_input(formatted_sample_caption, c_task)
+                # prediction = vlm_predict(copy.deepcopy(inp_ask_for_prediction), raw_image, model, tokenizer, c_task, labels=labels)
+                # p_c_sample = evaluate_prediction(prediction, 'A', c_task)
+                # p_c += p_c_sample
+                # _, mm_score, _, _ = explain_VLM(copy.deepcopy(inp_ask_for_prediction), raw_image, model, tokenizer, max_new_tokens=1)
+                # t_shap_c_sum += mm_score
 
-                inp_ask_for_prediction = prompt_answer_with_input(formatted_sample_foil, c_task)
-                prediction = vlm_predict(copy.deepcopy(inp_ask_for_prediction), raw_image, model, tokenizer, c_task, labels=labels)
-                p_f_sample = evaluate_prediction(prediction, 'B', c_task)
-                p_f += p_f_sample
+                # inp_ask_for_prediction = prompt_answer_with_input(formatted_sample_foil, c_task)
+                # prediction = vlm_predict(copy.deepcopy(inp_ask_for_prediction), raw_image, model, tokenizer, c_task, labels=labels)
+                # p_f_sample = evaluate_prediction(prediction, 'B', c_task)
+                # p_f += p_f_sample
+                # _, mm_score, _, _ = explain_VLM(copy.deepcopy(inp_ask_for_prediction), raw_image, model, tokenizer, max_new_tokens=1)
+                # t_shap_f_sum += mm_score
 
-                # c = time.time()-t7
-                # print(f"A step ran for {c // 60 % 60:.2f} minutes, {c % 60:.2f} seconds.")
 
                 res_dict[f"{c_task}_{model_name}_{k}"] = {
                     "image_path": image_path,
@@ -162,10 +163,19 @@ if __name__ == '__main__':
                     "correct_answer": correct_answer,
                     "post-hoc": {
                         "acc_r": acc_r_sample,
-                        "p_c": p_c_sample,
-                        "p_f": p_f_sample,
+                        # "p_c": p_c_sample,
+                        # "p_f": p_f_sample,
                     },
                 }
+
+                if (k+1) % 1 == 0:
+                    print(f"Ran valse eval on {c_task} {k+1} samples with model {model_name}. Reporting accuracy metrics.\n")
+                    print(f"acc_r %          : {acc_r*100/(k+1):.2f}  ")
+                    # print(f"p_c %            : {p_c*100/(k+1):.2f}  ")
+                    # print(f"p_f %            : {p_f*100/(k+1):.2f}  ")
+                    print(f"T-SHAP_r %       : {t_shap_r_sum/(k+1)*100:.2f}  ")
+                    # print(f"T-SHAP_c %       : {t_shap_c_sum/(k+1)*100:.2f}  ")
+                    # print(f"T-SHAP_f %       : {t_shap_f_sum/(k+1)*100:.2f}  ")
 
             if save_json:
                 # save results to a json file, make results_json directory if it does not exist
@@ -177,8 +187,11 @@ if __name__ == '__main__':
 
             print(f"Ran valse eval on {c_task} {count} samples with model {model_name}. Reporting accuracy metrics.\n")
             print(f"acc_r %          : {acc_r*100/count:.2f}  ")
-            print(f"p_c %            : {p_c*100/count:.2f}  ")
-            print(f"p_f %            : {p_f*100/count:.2f}  ")
+            # print(f"p_c %            : {p_c*100/count:.2f}  ")
+            # print(f"p_f %            : {p_f*100/count:.2f}  ")
+            print(f"T-SHAP_r %       : {t_shap_r_sum/count*100:.2f}  ")
+            # print(f"T-SHAP_c %       : {t_shap_c_sum/count*100:.2f}  ")
+            # print(f"T-SHAP_f %       : {t_shap_f_sum/count*100:.2f}  ")
 
 
     c = time.time()-t1

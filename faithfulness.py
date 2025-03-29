@@ -118,9 +118,9 @@ if __name__ == '__main__':
                     test_sentences = [foil["caption"], confounder["caption"]]
                 else:
                     if c_task == 'plurals':
-                        test_sentences = [foil["caption"][0], foil["foils"][0]]
+                        test_sentences = [foil["caption"][0], foil["foil"][0]]
                     else:
-                        test_sentences = [foil["caption"], foil["foils"][0]]
+                        test_sentences = [foil["caption"], foil["foil"][0]]
 
                 # shuffle the order of caption and foil such that the correct answer is not always A
                 if random.choice([0, 1]) == 0:

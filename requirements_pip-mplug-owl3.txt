@@ -155,9 +155,9 @@ thinc==8.3.2
 threadpoolctl==3.5.0
 tinycss2==1.4.0
 tokenizers==0.20.3
-torch==2.5.1+cu124
-torchaudio==2.5.1+cu124
-torchvision==0.20.1+cu124
+torch==2.5.1 # might need to do torch==2.5.1+cu124
+torchaudio==2.5.1 # might need to do torchaudio==2.5.1+cu124
+torchvision==0.20.1 # might need to do torchvision==0.20.1+cu124
 tornado==6.4.1
 tqdm==4.67.0
 traitlets==5.14.3
