@@ -35,10 +35,10 @@ Now, we extend to VLMs 🖼️+📃.
 ```
 
 ### Supported Models
-1. mPLUG-Owl3 (second paper version) can be run from the main branch with the instructions from the next section.
-1. BakLLaVA (first paper version). To run, check out the branch `vicuna-mistral-bakllava-models` and followint the instructions from the `README.md` file there. It is not supported by the current branch because this model requires an older version of hf `transformers` which breaks compatibility with the code written for this (and the following) models.
-1. LLaVA-NeXT-Vicuna (first paper version) idem as above.
-1. LLaVA-NeXT-Mistral (first paper version) idem as above.
+1. mPLUG-Owl3 (second paper version) can be run from the `main` branch with the instructions in the next section.
+1. BakLLaVA (first paper version) is *experimental* on `main`, because the hf `transformers` version had to be upgraded for supporting mPLUG-Owl3 -- upgrade which brought significant functionality changes. To run the model as it was run for the paper, check out the branch `vicuna-mistral-bakllava-models` and follow the instructions from the `README.md` file there.
+1. LLaVA-NeXT-Vicuna (first paper version) same as above.
+1. LLaVA-NeXT-Mistral (first paper version) same as above.
 
 ## Installation and running
 1. `conda create -n <env-name> python=3.12.1`

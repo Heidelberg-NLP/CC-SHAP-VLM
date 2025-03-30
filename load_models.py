@@ -30,17 +30,23 @@ def load_models(model_name):
     else:
         if model_name == "bakllava":
             ModelClass = LlavaForConditionalGeneration
+            revision_id = "a92a28c845fbe89d009f211ce3d0d7aa6d42e948"
         else:
             ModelClass = LlavaNextForConditionalGeneration
+        if model_name == "llava_mistral":
+            revision_id = "8a7baf5084e1fa437f1fcc58f512fbdb340a2dd9"
+        elif model_name == "llava_vicuna":
+            revision_id = "89b0f2ea28da2e62d7cfda173a400d2ad82a1c8e"
         with torch.no_grad():
             model = ModelClass.from_pretrained(MODELS[model_name], torch_dtype=torch.float16, 
-                low_cpu_mem_usage=True, #device_map="auto"
+                low_cpu_mem_usage=True,
+                revision=revision_id, #device_map="auto"
                 # use_flash_attention_2=True, # comment this in if you want to use flash_attention_2
             ).to("cuda")
 
     # load tokenizer
     if "mplug" in model_name:
-        tokenizer_real = AutoTokenizer.from_pretrained(MODELS[model_name])
+        tokenizer_real = AutoTokenizer.from_pretrained(MODELS[model_name], revision=revision_id)
         processor = model.init_processor(tokenizer_real)
         tokenizer = {"tokenizer": tokenizer_real, "processor": processor}
     else:
