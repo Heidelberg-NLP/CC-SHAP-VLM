@@ -41,14 +41,14 @@ Now, we extend to VLMs 🖼️+📃.
   * VALSE 💃: https://github.com/Heidelberg-NLP/VALSE
   * VQA: https://visualqa.org/download.html
   * GQA: https://cs.stanford.edu/people/dorarad/gqa/download.html 
-4. Run `run-faithfulness.py` with the following command `python faithfulness.py foil_it mplug-owl3-7b 100 0 data/`
+4. Run `run-faithfulness.py` with the following command `python faithfulness.py foil_it bakllava 100 0 data/`
 5. Install nltk wordnet if running the counterfactual test which requires it. You can do this by running `python -m nltk.downloader wordnet` in the terminal.
 
 ### Supported Models
 1. BakLLaVA (first paper version)
 1. LLaVA-NeXT-Vicuna (first paper version)
 1. LLaVA-NeXT-Mistral (first paper version)
-1. ❌ mPLUG-Owl3 (second paper version) is supported by the `main` branch only. It is not supported by the current branch because this model requires a newer version of `transformers` which breaks compatibility with the code written for the other models. 🛠️ To run mPLUG-Owl3, switch to the `main` branch and install the requirements from `requirements_pip-mplug-owl3.txt`.
+1. ❌ mPLUG-Owl3 (second paper version) is supported by the `main` branch only. It is not supported by the current branch because this model requires a newer version of hf `transformers` which breaks compatibility with the code written for the other models. 🛠️ To run mPLUG-Owl3, switch to the `main` branch and install the requirements from `requirements_pip-mplug-owl3.txt`.
 
 ## Supported Tests
 To activate tests individually, comment the respective elements of `TESTS` in `config.py` (cc_shap-posthoc and cc_shap-cot must be run together). All tests are implemented for the first three models. The mPLUG-Owl3 model is only supported for the cc_shap-posthoc and cc_shap-cot tests (in the `main` branch).
