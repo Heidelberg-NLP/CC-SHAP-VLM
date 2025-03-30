@@ -34,30 +34,30 @@ Now, we extend to VLMs 🖼️+📃.
 }
 ```
 
+### Supported Models
+1. mPLUG-Owl3 (second paper version) can be run from the main branch with the instructions from the next section.
+1. BakLLaVA (first paper version). To run, check out the branch `vicuna-mistral-bakllava-models` and followint the instructions from the `README.md` file there. It is not supported by the current branch because this model requires an older version of hf `transformers` which breaks compatibility with the code written for this (and the following) models.
+1. LLaVA-NeXT-Vicuna (first paper version) idem as above.
+1. LLaVA-NeXT-Mistral (first paper version) idem as above.
+
 ## Installation and running
 1. `conda create -n <env-name> python=3.12.1`
-2. `pip install -r requirements_pip-mplug-owl3.txt` for installing the required packages with pip. This was used to run the mPLUG-Owl3 experiments but unfortunately `transformers` broke backwards compatibility.
-The experiments for the other 3 models were run with the installation from `conda create --name <env> --file requirements_conda.txt` (there is also a pip export for them in `requirements_pip.txt`).
+2. `pip install -r requirements_pip-mplug-owl3.txt` for installing the required packages with pip for running mPLUG-Owl3 experiments.
 3. Download the data from their respective repositories and change the paths in `config.py` accordingly. Data repositories:
   * VALSE 💃: https://github.com/Heidelberg-NLP/VALSE
   * VQA: https://visualqa.org/download.html
   * GQA: https://cs.stanford.edu/people/dorarad/gqa/download.html 
-4. Run `faithfulness.py` with the following command `python faithfulness.py foil_it mplug-owl3-7b 100 0 data/`
-
-### Supported Models
-1. BakLLaVA (first paper version)
-1. LLaVA-NeXT-Vicuna (first paper version)
-1. LLaVA-NeXT-Mistral (first paper version)
-1. mPLUG-Owl3 (second paper version). To run this model, you need to make sure the `_decode` function in `$HF_HOME/modules/transformers_modules/mPLUG/mPLUG-Owl3-7B-240728/eff25bcdc02ff1b513c25f376d761ec1ab6dfa1b/modeling_mplugowl3.py` returns the output ids and not just the text, so update the last lines of that function to:
+3. To run mPLUG-Owl3, you need to make sure the `_decode` function in `$HF_HOME/modules/transformers_modules/mPLUG/mPLUG-Owl3-7B-240728/eff25bcdc02ff1b513c25f376d761ec1ab6dfa1b/modeling_mplugowl3.py` returns the output ids and not just the text, so update the last lines of that function to:
 ```python	
     if decode_text:
         output = output[:,input_ids.shape[1]:]
         return self._decode_text(output, tokenizer)
     return output
 ```
+4. Run `run-faithfulness.py` with the following command `python run-faithfulness.py foil_it mplug-owl3-7b 100 0 data/`
 
 ## Supported Tests
-To activate tests individually, comment the respective elements of `TESTS` in `config.py` (cc_shap-posthoc and cc_shap-cot must be run together). All tests are implemented for the first three models. The mPLUG-Owl3 model is only supported for the cc_shap-posthoc and cc_shap-cot tests.
+To activate tests individually, comment the respective elements of `TESTS` in `config.py` (cc_shap-posthoc and cc_shap-cot must be run together). All tests are implemented for the first three models in the other branch. The mPLUG-Owl3 model is only supported for the cc_shap-posthoc and cc_shap-cot tests.
 
 ## Credits
 The Shapley value implementation in the `shap` folder is a modified version of https://github.com/slundberg/shap .
