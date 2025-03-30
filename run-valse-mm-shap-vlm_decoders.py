@@ -3,11 +3,10 @@ import torch
 print("Cuda is available:", torch.cuda.is_available())
 from accelerate import Accelerator
 import json
-from transformers import AutoTokenizer, AutoModel, AutoModelForCausalLM, AutoProcessor, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration, AutoConfig
 from PIL import Image
 import random, os
-from tqdm import tqdm
 
+from load_models import load_models
 from read_datasets import read_data
 from generation_and_prompting import *
 from mm_shap_cc_shap import *
@@ -33,45 +32,7 @@ num_samples = int(sys.argv[3])
 save_json = int(sys.argv[4])
 data_root = sys.argv[5]
 
-# load model
-if "mplug" in model_name:
-    config = AutoConfig.from_pretrained(MODELS[model_name], trust_remote_code=True)
-    with torch.no_grad():
-        model = AutoModel.from_pretrained(MODELS[model_name], attn_implementation='sdpa', torch_dtype=torch.half, trust_remote_code=True).to("cuda").eval() #device_map="auto"
-# elif model_name == "llava_vicuna":
-#     from transformers import BitsAndBytesConfig
-#     # specify how to quantize the model with bitsandbytes
-#     quantization_config = BitsAndBytesConfig(
-#         # load_in_8bit=True,
-#         load_in_4bit=True,
-#         bnb_4bit_quant_type="nf4",
-#         bnb_4bit_compute_dtype=torch.float16,
-#     ) # 8 just load_in_8bit=True,
-#     with torch.no_grad():
-#         model = LlavaNextForConditionalGeneration.from_pretrained(MODELS[model_name], torch_dtype=torch.float16, 
-#             low_cpu_mem_usage=True,
-#             use_flash_attention_2=True,
-#             quantization_config = quantization_config
-#         ) # .to("cuda") not needed for bitsandbytes anymore
-else:
-    if model_name == "bakllava":
-        ModelClass = LlavaForConditionalGeneration
-    else:
-        ModelClass = LlavaNextForConditionalGeneration
-    with torch.no_grad():
-        model = ModelClass.from_pretrained(MODELS[model_name], torch_dtype=torch.float16, 
-            low_cpu_mem_usage=True, #device_map="auto"
-            use_flash_attention_2=True,
-        ).to("cuda")
-
-# load tokenizer
-if "mplug" in model_name:
-    tokenizer_real = AutoTokenizer.from_pretrained(MODELS[model_name])
-    processor = model.init_processor(tokenizer_real)
-    tokenizer = {"tokenizer": tokenizer_real, "processor": processor}
-else:
-    tokenizer = AutoProcessor.from_pretrained(MODELS[model_name])
-print(f"Done loading model and tokenizer after {time.time()-t1:.2f}s.")
+model, tokenizer = load_models(model_name)
 
 if __name__ == '__main__':
     ############################# run evals on all valse instruments
