@@ -54,7 +54,7 @@ def explain_VLM(prompt, raw_image, model, tokenizer, max_new_tokens=100, p=None)
         else: # bakllava and llava_mistral specific
             condition = (masked_X == 1) | (masked_X == 32000) | (masked_X == 28705)
         indices = torch.nonzero(condition, as_tuple=False)
-        mask[indices] = True
+        mask[indices[:,1]] = True
 
         # set to zero the image tokens we are going to mask
         image_mask = torch.tensor(mask).unsqueeze(0)
@@ -159,7 +159,7 @@ def aggregate_values_explanation(shap_values, tokenizer, to_marginalize =' Yes. 
     # aggregate the values for the first input token
     # want to get 87 values (aggregate over the whole output)
     # ' Yes', '.', ' Why', '?' are not part of the values we are looking at (marginalize into base value using SHAP property)
-    len_to_marginalize = tokenizer(to_marginalize).input_ids.shape[1] - 2 # -2 because tokenizer adds the <s> token here again and a space 28705
+    len_to_marginalize = tokenizer(to_marginalize, return_tensors='pt').input_ids.shape[1] - 2 # -2 because tokenizer adds the <s> token here again and a space 28705
     add_to_base = np.abs(shap_values.values[:, -len_to_marginalize:]).sum(axis=1)
     # check if values per output token are not very low
     small_values = [True if x < 0.01 else False for x in np.mean(np.abs(shap_values.values[0,-len_to_marginalize:]), axis=0)]

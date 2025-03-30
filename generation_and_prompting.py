@@ -133,7 +133,7 @@ def vlm_classify(inputt, raw_image, model, tokenizer, labels=['A', 'B']):
     for i, label in enumerate(labels):
         # idx = 0 if any([True if x in model_name else False for x in ['gpt', 'bloom', 'falcon']]) else 1 # the gpt2 model returns only one token
         idx = 1  # TODO: check this for all new models we aim to analyse
-        label_id = tokenizer(label).input_ids[0, idx]
+        label_id = tokenizer(label, return_tensors='pt').input_ids[0, idx]
         label_scores[i] = generated_ids.scores[0][0, label_id]
         
     # choose as label the one wih the highest score

@@ -2,13 +2,13 @@ import time, sys
 import torch
 print("Cuda is available:", torch.cuda.is_available())
 from accelerate import Accelerator
-import pandas as pd
 import json
-from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration
+from transformers import AutoTokenizer, AutoModelForCausalLM
 from PIL import Image
 import random, os
 from tqdm import tqdm
 
+from load_models import load_models
 from read_datasets import read_data
 from generation_and_prompting import *
 from mm_shap_cc_shap import *
@@ -34,33 +34,7 @@ num_samples = int(sys.argv[3])
 save_json = int(sys.argv[4])
 data_root = sys.argv[5]
 
-if model_name == "llava_vicuna":
-    from transformers import BitsAndBytesConfig
-    # specify how to quantize the model with bitsandbytes
-    quantization_config = BitsAndBytesConfig(
-        # load_in_8bit=True,
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.float16,
-    ) # 8 just load_in_8bit=True,
-    with torch.no_grad():
-        model = LlavaNextForConditionalGeneration.from_pretrained(MODELS[model_name], torch_dtype=torch.float16, 
-            low_cpu_mem_usage=True,
-            use_flash_attention_2=True,
-            quantization_config = quantization_config
-        ) # .to("cuda") not needed for bitsandbytes anymore
-else:
-    if model_name == "bakllava":
-        ModelClass = LlavaForConditionalGeneration
-    else:
-        ModelClass = LlavaNextForConditionalGeneration
-    with torch.no_grad():
-        model = ModelClass.from_pretrained(MODELS[model_name], torch_dtype=torch.float16, 
-            low_cpu_mem_usage=True, #device_map="auto"
-            use_flash_attention_2=True, # untested for bakllava
-        ).to("cuda")
-tokenizer = AutoProcessor.from_pretrained(MODELS[model_name])
-print(f"Done loading model and tokenizer after {time.time()-t1:.2f}s.")
+model, tokenizer = load_models(model_name)
 
 # prompt = "USER: <image>\nWhat is this?\nASSISTANT:"
 # image_path = "/home/mitarb/parcalabescu/COCO/all_images/COCO_test2014_000000489547.jpg"
@@ -73,10 +47,13 @@ print(f"Done loading model and tokenizer after {time.time()-t1:.2f}s.")
 # print(vlm_classify(prompt, raw_image, model, tokenizer, labels=['Y', 'X', 'A', 'B', 'var' ,'Y']))
 # print(f"This script so far (generation) needed {time.time()-t1:.2f}s.")
 
-with torch.no_grad():
-    helper_model = AutoModelForCausalLM.from_pretrained(MODELS['llama2-13b-chat'], torch_dtype=torch.float16, device_map="auto", token=True)
-helper_tokenizer = AutoTokenizer.from_pretrained(MODELS['llama2-13b-chat'], use_fast=False, padding_side='left')
-print(f"Loaded helper model {time.time()-t1:.2f}s.")
+if 'atanasova_counterfactual' in TESTS or 'turpin' in TESTS or 'lanham' in TESTS:
+    with torch.no_grad():
+        helper_model = AutoModelForCausalLM.from_pretrained(MODELS['llama2-13b-chat'], torch_dtype=torch.float16, device_map="auto", token=True)
+    helper_tokenizer = AutoTokenizer.from_pretrained(MODELS['llama2-13b-chat'], use_fast=False, padding_side='left')
+    print(f"Loaded helper model {time.time()-t1:.2f}s.")
+else:
+    print(f"No need for helper model given the subselection of tests.")
 
 # print(lm_generate('I enjoy walking with my cute dog.', helper_model, helper_tokenizer, max_new_tokens=max_new_tokens))
 
@@ -112,9 +89,9 @@ if __name__ == '__main__':
                     test_sentences = [foil["caption"], confounder["caption"]]
                 else:
                     if c_task == 'plurals':
-                        test_sentences = [foil["caption"][0], foil["foils"][0]]
+                        test_sentences = [foil["caption"][0], foil["foil"][0]]
                     else:
-                        test_sentences = [foil["caption"], foil["foils"][0]]
+                        test_sentences = [foil["caption"], foil["foil"][0]]
 
                 # shuffle the order of caption and foil such that the correct answer is not always A
                 if random.choice([0, 1]) == 0:
@@ -178,7 +155,7 @@ if __name__ == '__main__':
         input_ask_for_cot = prompt_cot_with_input(formatted_sample, c_task)
         input_cot = vlm_generate(input_ask_for_cot, raw_image, model, tokenizer, max_new_tokens=max_new_tokens, repeat_input=True)
         input_cot_ask_for_pred = prompt_answer_after_cot_with_input(input_cot, c_task)
-        prediction_cot = vlm_predict(input_cot, raw_image, model, tokenizer, c_task, labels=labels)
+        prediction_cot = vlm_predict(input_cot_ask_for_pred, raw_image, model, tokenizer, c_task, labels=labels)
         accuracy_cot_sample = evaluate_prediction(prediction_cot, correct_answer, c_task)
         accuracy_cot += accuracy_cot_sample
 

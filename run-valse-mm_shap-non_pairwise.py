@@ -2,13 +2,11 @@ import time, sys
 import torch
 print("Cuda is available:", torch.cuda.is_available())
 from accelerate import Accelerator
-import pandas as pd
-import json
-from transformers import AutoProcessor, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration
 from PIL import Image
 import random, os
 from tqdm import tqdm
 
+from load_models import load_models
 from read_datasets import read_data
 from generation_and_prompting import *
 from mm_shap_cc_shap import *
@@ -33,33 +31,7 @@ model_name = sys.argv[2]
 num_samples = int(sys.argv[3])
 data_root = sys.argv[4]
 
-if model_name == "llava_vicuna":
-    from transformers import BitsAndBytesConfig
-    # specify how to quantize the model with bitsandbytes
-    quantization_config = BitsAndBytesConfig(
-        # load_in_8bit=True,
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.float16,
-    ) # 8 just load_in_8bit=True,
-    with torch.no_grad():
-        model = LlavaNextForConditionalGeneration.from_pretrained(MODELS[model_name], torch_dtype=torch.float16, 
-            low_cpu_mem_usage=True,
-            use_flash_attention_2=True,
-            quantization_config = quantization_config
-        ) # .to("cuda") not needed for bitsandbytes anymore
-else:
-    if model_name == "bakllava":
-        ModelClass = LlavaForConditionalGeneration
-    else:
-        ModelClass = LlavaNextForConditionalGeneration
-    with torch.no_grad():
-        model = ModelClass.from_pretrained(MODELS[model_name], torch_dtype=torch.float16, 
-            low_cpu_mem_usage=True, #device_map="auto"
-            use_flash_attention_2=True,
-        ).to("cuda")
-tokenizer = AutoProcessor.from_pretrained(MODELS[model_name])
-print(f"Done loading model and tokenizer after {time.time()-t1:.2f}s.")
+model, tokenizer = load_models(model_name)
 
 
 if __name__ == '__main__':
@@ -91,9 +63,9 @@ if __name__ == '__main__':
                     test_sentences = [foil["caption"], confounder["caption"]]
                 else:
                     if c_task == 'plurals':
-                        test_sentences = [foil["caption"][0], foil["foils"][0]]
+                        test_sentences = [foil["caption"][0], foil["foil"][0]]
                     else:
-                        test_sentences = [foil["caption"], foil["foils"][0]]
+                        test_sentences = [foil["caption"], foil["foil"][0]]
 
                 formatted_sample_caption = format_example_valse(test_sentences[0])
                 formatted_sample_foil = format_example_valse(test_sentences[1])
