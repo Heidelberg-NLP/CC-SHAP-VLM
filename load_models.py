@@ -34,7 +34,7 @@ def load_models(model_name):
         else:
             ModelClass = LlavaNextForConditionalGeneration
         if model_name == "llava_mistral":
-            revision_id = "8a7baf5084e1fa437f1fcc58f512fbdb340a2dd9"
+            revision_id = "8a7baf5084e1fa437f1fcc58f512fbdb340a2dd9" # hash for the 7b model. For the 2b model it should be 77ab9a6fdb9dae9ce2cd2eda3d32c8ff45ebc7db
         elif model_name == "llava_vicuna":
             revision_id = "89b0f2ea28da2e62d7cfda173a400d2ad82a1c8e"
         with torch.no_grad():
