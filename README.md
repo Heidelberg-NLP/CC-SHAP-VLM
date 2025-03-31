@@ -47,7 +47,7 @@ Now, we extend to VLMs 🖼️+📃.
   * VALSE 💃: https://github.com/Heidelberg-NLP/VALSE
   * VQA: https://visualqa.org/download.html
   * GQA: https://cs.stanford.edu/people/dorarad/gqa/download.html 
-3. To run mPLUG-Owl3, you need to make sure the `_decode` function in `$HF_HOME/modules/transformers_modules/mPLUG/mPLUG-Owl3-7B-240728/eff25bcdc02ff1b513c25f376d761ec1ab6dfa1b/modeling_mplugowl3.py` returns the output ids and not just the text, so update the last lines of that function to:
+3. To run mPLUG-Owl3, you need to make sure the `_decode` function in `$HF_HOME/modules/transformers_modules/mPLUG/mPLUG-Owl3-7B-240728/eff25bcdc02ff1b513c25f376d761ec1ab6dfa1b/modeling_mplugowl3.py` returns the output ids and not just the text, so move the line `output = output[:,input_ids.shape[1]:]` to the if statement such that the last lines of that function look like:
 ```python	
     if decode_text:
         output = output[:,input_ids.shape[1]:]
