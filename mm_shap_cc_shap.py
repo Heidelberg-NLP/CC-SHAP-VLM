@@ -12,10 +12,10 @@ random.seed(42)
 
 model_name = sys.argv[2]
 
-def compute_mm_score(text_length, shap_values):
+def compute_mm_score(img_length, shap_values):
     """ Compute Multimodality Score. (80% textual, 20% visual, possibly: 0% knowledge). """
-    image_contrib = np.abs(shap_values.values[0, :text_length, :]).sum()
-    text_contrib = np.abs(shap_values.values[0, text_length:, :]).sum()
+    image_contrib = np.abs(shap_values.values[0, :img_length, :]).sum()
+    text_contrib = np.abs(shap_values.values[0, img_length:, :]).sum()
     text_score = text_contrib / (text_contrib + image_contrib)
     # image_score = image_contrib / (text_contrib + image_contrib) # is just 1 - text_score in the two modalities case
     return text_score
@@ -145,7 +145,7 @@ def explain_VLM(prompt, raw_image, model, tokenizer, max_new_tokens=100, p=None)
     if len(shap_values.values.shape) == 2:
         shap_values.values = np.expand_dims(shap_values.values, axis=2)
 
-    mm_score = compute_mm_score(nb_text_tokens, shap_values)
+    mm_score = compute_mm_score(image_token_ids.shape[1], shap_values)
 
     return shap_values, mm_score, p, nb_text_tokens
 
