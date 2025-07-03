@@ -1,5 +1,8 @@
 max_new_tokens = 100
 visualize = True
+
+input_type = "video"  # or "image"
+
 TESTS = [
     # 'atanasova_counterfactual',
     'cc_shap-posthoc',
