@@ -1,0 +1,60 @@
+[project]
+name = "cc-shap-vlm"
+version = "0.1.0"
+description = "CC-SHAP for VLMs: self-consistency of vision & language decoders' explanations (ICLR 2025)"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    # Deep learning core. Pinned to the versions mPLUG-Owl3's trust_remote_code was
+    # validated against; its custom modeling code breaks on other transformers majors,
+    # so these move together and stay in lock-step with the "before" stack.
+    "torch==2.5.1",
+    "torchvision==0.20.1",
+    "torchaudio==2.5.1",
+    "xformers==0.0.28.post3",
+    "accelerate==1.1.1",
+    "bitsandbytes==0.44.1",
+    # Hugging Face stack (mPLUG-Owl3-sensitive; keep pinned)
+    "transformers==4.46.2",
+    "tokenizers==0.20.3",
+    "huggingface-hub==0.26.2",
+    "safetensors==0.4.5",
+    "sentencepiece==0.2.0",
+    "protobuf==5.28.3",
+    # mPLUG-Owl3 remote code deps
+    "einops>=0.8,<0.9",
+    "icecream>=2.1,<2.2",
+    # Numerics / data. numpy 2.x matches the original stack (vendored shap runs on it).
+    "numpy>=2.0,<2.1",
+    "pandas>=2.2,<2.3",
+    "scipy>=1.14,<1.15",
+    "scikit-learn>=1.5,<1.6",
+    "matplotlib>=3.9,<3.10",
+    "numba>=0.60,<0.61",
+    # NLP tooling used by the faithfulness tests
+    "spacy>=3.8,<3.9",
+    "nltk>=3.9",
+    # Imaging / IO / utilities
+    "pillow>=10.2,<11",
+    "tqdm>=4.67",
+    "requests>=2.32",
+    "ipython>=8.29",
+    # Used by the vendored `shap/` package
+    "slicer>=0.0.8",
+    "cloudpickle>=3.1",
+    "packaging>=24.0",
+]
+
+# This repo is a set of scripts plus a vendored, modified `shap/` package, not a
+# distributable library, so uv manages the environment without building/installing it.
+[tool.uv]
+package = false
+
+[tool.ruff.lint.per-file-ignores]
+# These scripts call load_env() before importing transformers/huggingface_hub so the HF
+# token/cache env vars take effect, which necessarily puts imports after a statement.
+"run-faithfulness.py" = ["E402"]
+"run-valse-acc-vlm_decoders.py" = ["E402"]
+"run-valse-mm-shap-vlm_decoders.py" = ["E402"]
+"run-valse-mm_shap-non_pairwise-vlm_decoders.py" = ["E402"]
+"scripts/setup_mplug.py" = ["E402"]

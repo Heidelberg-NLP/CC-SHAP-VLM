@@ -1,5 +1,11 @@
 max_new_tokens = 100
 visualize = True
+
+# Runtime defaults, overridable per run via run-faithfulness.py flags (--dtype/--decoding).
+# Paper behavior is fp16 weights with sampled decoding; switch to float32 + greedy for
+# deterministic, cross-run-comparable scores.
+DTYPE = "float16"     # "float16" | "float32"
+DECODING = "sample"   # "sample" | "greedy"
 TESTS = [
     # 'atanasova_counterfactual',
     'cc_shap-posthoc',
@@ -15,6 +21,13 @@ MODELS = {
     'llama2-13b-chat': 'meta-llama/Llama-2-13b-chat-hf',
     'mplug-owl3-2b': 'mPLUG/mPLUG-Owl3-2B-241014',
     'mplug-owl3-7b': 'mPLUG/mPLUG-Owl3-7B-240728',
+}
+
+# Pinned remote-code revisions for the mPLUG-Owl3 models. The 7B hash is the one the paper
+# ran and the one the vendored modeling_mplugowl3.py patch is derived from.
+MPLUG_REVISIONS = {
+    'mplug-owl3-7b': 'eff25bcdc02ff1b513c25f376d761ec1ab6dfa1b',
+    'mplug-owl3-2b': None,
 }
 
 

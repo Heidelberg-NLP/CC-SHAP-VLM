@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import random, sys
 
+from ccshapvlm_repro import greedy_generation
 from config import *
 
 random.seed(42)
@@ -138,11 +139,11 @@ def vlm_generate(input_prompt, raw_image, model, tokenizer, max_new_tokens=100, 
             'decode_text': True,
         })
 
-        out = model.generate(**inputs, min_new_tokens=1, do_sample=True)[0]
+        out = model.generate(**inputs, min_new_tokens=1, do_sample=not greedy_generation())[0]
         return out
     else:
         inputs = tokenizer(input_prompt, raw_image, return_tensors='pt').to("cuda", torch.float16)
-        generated_ids = model.generate(**inputs, max_new_tokens=max_new_tokens, min_new_tokens=1, do_sample=True)
+        generated_ids = model.generate(**inputs, max_new_tokens=max_new_tokens, min_new_tokens=1, do_sample=not greedy_generation())
     # prevent the model from repeating the input
     if not repeat_input:
         generated_ids = generated_ids[:, inputs.input_ids.shape[1]:]

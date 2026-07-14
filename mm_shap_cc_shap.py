@@ -7,6 +7,7 @@ import matplotlib as plt
 import shap
 from PIL import Image
 
+from ccshapvlm_repro import greedy_generation, model_dtype
 from generation_and_prompting import *
 from config import *
 random.seed(42)
@@ -41,10 +42,10 @@ def explain_VLM(prompt, raw_image, model, tokenizer, max_new_tokens=100, p=None)
             'decode_text':False,
         })
 
-        outputs = model.generate(**copied_inputs, min_new_tokens=1, do_sample=True)
+        outputs = model.generate(**copied_inputs, min_new_tokens=1, do_sample=not greedy_generation())
     else:
         inputs = tokenizer(prompt, raw_image, return_tensors='pt').to("cuda", torch.float16)
-        outputs = model.generate(**inputs, max_new_tokens=max_new_tokens, min_new_tokens=1, do_sample=True)
+        outputs = model.generate(**inputs, max_new_tokens=max_new_tokens, min_new_tokens=1, do_sample=not greedy_generation())
     output_ids = outputs[:, inputs.input_ids.shape[1]:].to('cpu') # select only the output ids without repeating the input again
     inputs.to('cpu')
 
@@ -135,7 +136,7 @@ def explain_VLM(prompt, raw_image, model, tokenizer, max_new_tokens=100, p=None)
 
                     masked_inputs["pixel_values"] = masked_pixel_vals
                 
-                masked_inputs.to("cuda", torch.float16)
+                masked_inputs.to("cuda", model_dtype())
                 # # generate outputs and logits
                 if "mplug" in model_name:
                     masked_inputs.update({

@@ -2,15 +2,17 @@ import time
 import torch
 from transformers import AutoTokenizer, AutoModel, AutoModelForCausalLM, AutoProcessor, LlavaForConditionalGeneration, LlavaNextForConditionalGeneration, AutoConfig
 
+from ccshapvlm_repro import ensure_mplug_remote_code, model_dtype
 from config import *
 
 
 def load_models(model_name):
     t1 = time.time()
     if "mplug" in model_name:
-        revision_id = "eff25bcdc02ff1b513c25f376d761ec1ab6dfa1b"
+        revision_id = MPLUG_REVISIONS.get(model_name)
+        ensure_mplug_remote_code(MODELS[model_name], revision_id)
         with torch.no_grad():
-            model = AutoModel.from_pretrained(MODELS[model_name], attn_implementation='sdpa', torch_dtype=torch.half, revision=revision_id,
+            model = AutoModel.from_pretrained(MODELS[model_name], attn_implementation='sdpa', torch_dtype=model_dtype(), revision=revision_id,
             trust_remote_code=True, device_map="auto").eval()
     # elif model_name == "llava_vicuna": # comment this in if you want to use quantisation for llava_vicuna and flash_attention_2
     #     from transformers import BitsAndBytesConfig

@@ -1,4 +1,33 @@
-import time, sys
+import argparse, os, time, sys
+
+from ccshapvlm_repro import load_env, maybe_seed
+
+_parser = argparse.ArgumentParser(description="Run VLM faithfulness / CC-SHAP experiments.")
+_parser.add_argument("task")
+_parser.add_argument("model")
+_parser.add_argument("num_samples", type=int)
+_parser.add_argument("save_json", type=int)
+_parser.add_argument("data_root")
+_parser.add_argument("--dtype", choices=["float16", "float32"],
+                     help="model + image precision (default: config.DTYPE)")
+_parser.add_argument("--decoding", choices=["sample", "greedy"],
+                     help="answer/explanation decoding (default: config.DECODING)")
+_parser.add_argument("--seed", type=int, help="seed numpy/torch for reproducible runs")
+_args = _parser.parse_args()
+
+if _args.dtype:
+    os.environ["CCVLM_DTYPE"] = _args.dtype
+if _args.decoding:
+    os.environ["CCVLM_DECODING"] = _args.decoding
+if _args.seed is not None:
+    os.environ["CCVLM_SEED"] = str(_args.seed)
+
+# downstream modules read the model name from sys.argv[2]; normalize to positional-only form
+sys.argv = [sys.argv[0], _args.task, _args.model, str(_args.num_samples),
+            str(_args.save_json), _args.data_root]
+
+load_env()  # set HF token + cache dir before importing transformers/huggingface_hub
+
 import torch
 print("Cuda is available:", torch.cuda.is_available())
 from accelerate import Accelerator
@@ -25,14 +54,15 @@ import logging
 logging.getLogger('shap').setLevel(logging.ERROR)
 
 random.seed(42)
+maybe_seed()  # also seed numpy/torch when CCVLM_SEED is set (regression harness)
 
 t1 = time.time()
 
-c_task = sys.argv[1]
-model_name = sys.argv[2]
-num_samples = int(sys.argv[3])
-save_json = int(sys.argv[4])
-data_root = sys.argv[5]
+c_task = _args.task
+model_name = _args.model
+num_samples = _args.num_samples
+save_json = _args.save_json
+data_root = _args.data_root
 
 model, tokenizer = load_models(model_name)
 
