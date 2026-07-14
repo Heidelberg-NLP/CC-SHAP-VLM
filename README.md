@@ -40,27 +40,100 @@ Now, we extend to VLMs 🖼️+📃.
 1. LLaVA-NeXT-Vicuna (first paper version) same as above.
 1. LLaVA-NeXT-Mistral (first paper version) same as above.
 
-## Installation and running
-1. `conda create -n <env-name> python=3.12.1`
-2. `pip install -r requirements_pip-mplug-owl3.txt` for installing the required packages with pip for running mPLUG-Owl3 experiments.
-3. Download the data from their respective repositories and change the paths in `config.py` accordingly. Data repositories:
-  * VALSE 💃: https://github.com/Heidelberg-NLP/VALSE
-  * VQA: https://visualqa.org/download.html
-  * GQA: https://cs.stanford.edu/people/dorarad/gqa/download.html 
-3. To run mPLUG-Owl3, you need to make sure the `_decode` function in `$HF_HOME/modules/transformers_modules/mPLUG/mPLUG-Owl3-7B-240728/eff25bcdc02ff1b513c25f376d761ec1ab6dfa1b/modeling_mplugowl3.py` returns the output ids and not just the text, so move the line `output = output[:,input_ids.shape[1]:]` to the if statement such that the last lines of that function look like:
-```python	
-    if decode_text:
-        output = output[:,input_ids.shape[1]:]
-        return self._decode_text(output, tokenizer)
-    return output
+## Setup
+
+Dependencies are managed with [uv](https://docs.astral.sh/uv/) (Python 3.12):
+
+```bash
+uv sync                                     # create .venv from pyproject.toml
+uv pip install "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl"
 ```
-4. Run `run-faithfulness.py` with the following command `python run-faithfulness.py foil_it mplug-owl3-7b 100 0 data/`
 
-## Supported Tests
-To activate tests individually, comment the respective elements of `TESTS` in `config.py` (cc_shap-posthoc and cc_shap-cot must be run together). All tests are implemented for the first three models in the other branch. The mPLUG-Owl3 model is only supported for the cc_shap-posthoc and cc_shap-cot tests.
+For HuggingFace access and a custom cache location, copy `.env.example` to `.env`
+(gitignored) and fill it in:
 
-## Credits
-The Shapley value implementation in the `shap` folder is a modified version of https://github.com/slundberg/shap .
+```dotenv
+HF_TOKEN=hf_...                             # only needed for gated models (Llama-2 helper)
+HF_CACHE=/path/with/space/for/model/weights # sets HF_HOME so weights don't fill $HOME
+```
+
+`.env` is loaded automatically by the `run-*.py` entrypoints (via `hf_env.load_env`)
+before any HuggingFace import, so the token and cache directory take effect.
+
+## Models
+
+Models are selected by the second CLI argument and downloaded from the HuggingFace Hub on
+first use (keys map to Hub ids in the `MODELS` dict in `config.py`).
+
+| `model` arg | Hub id | Notes |
+| --- | --- | --- |
+| `mplug-owl3-7b` | `mPLUG/mPLUG-Owl3-7B-240728` | main paper model; fits across the RTX 3090s in fp16 |
+| `mplug-owl3-2b` | `mPLUG/mPLUG-Owl3-2B-241014` | smaller mPLUG-Owl3 variant |
+| `bakllava`, `llava_mistral`, `llava_vicuna` | see `MODELS` | first-paper models; *experimental* on `main` (see below) |
+
+mPLUG-Owl3 loads via `trust_remote_code`. Its `_decode` needs a one-line fix so the SHAP
+path receives output ids instead of decoded text; the fixed file is **vendored** under
+[`mplug_owl3/`](mplug_owl3/) (Apache-2.0) and applied to the HuggingFace cache
+automatically at load time (`ccshapvlm.models.mplug_owl3.ensure_mplug_remote_code`). To pre-fetch the
+weights and apply the patch up front:
+
+```bash
+uv run python scripts/setup_mplug.py --model mplug-owl3-7b
+```
+
+The `bakllava` / `llava_*` models ran on transformers 4.35 for the first paper version; the
+`main` branch upgraded transformers to 4.46 for mPLUG-Owl3, so they are experimental here.
+To reproduce them exactly, check out the `vicuna-mistral-bakllava-models` branch.
+
+## Dataset
+
+The paper reads the full VALSE / VQA / GQA sets. For smoke tests we only need a handful
+of examples, fetched by `scripts/prepare_sample.py` into `data/`:
+
+```bash
+uv run python scripts/prepare_sample.py --num 5
+```
+
+This writes the `foil_it` instrument that `config.MULT_CHOICE_DATA` points at:
+
+- `data/foil-it.json` (VALSE `foil-it` annotations, reduced)
+- `data/COCO/all_images/*.jpg` (the referenced COCO val2014 images)
+
+For the full benchmarks, download from
+[VALSE](https://github.com/Heidelberg-NLP/VALSE),
+[VQA](https://visualqa.org/download.html), and
+[GQA](https://cs.stanford.edu/people/dorarad/gqa/download.html), then uncomment the
+relevant entries in `config.py`.
+
+## Usage
+
+Run from the repository root (so `import shap` resolves to the vendored `shap/`):
+
+```bash
+uv run python run-faithfulness.py <task> <model> <num_samples> <save_json> <data_root> [flags]
+# e.g.
+uv run python run-faithfulness.py foil_it mplug-owl3-7b 5 1 data/
+```
+
+Optional flags (defaults come from `config.py`, i.e. the paper's fp16 + sampled decoding
+with teacher-forced scoring):
+
+| flag | values | effect |
+| --- | --- | --- |
+| `--dtype` | `float16` (default) / `float32` | model + image precision; `float32` removes fp16 rounding noise for more stable SHAP scores |
+| `--decoding` | `sample` (default) / `greedy` | `greedy` makes generated answers/explanations reproducible across runs |
+| `--scoring` | `teacher_forcing` (default) / `efficient` | SHAP target scoring: teacher-forced per-position log-odds vs cheaper first-step logits |
+
+Results are written to `results_json/`. To activate tests individually, edit `TESTS` in
+`config.py` (`cc_shap-posthoc` and `cc_shap-cot` must be run together). On `main`,
+mPLUG-Owl3 supports the `cc_shap-posthoc` and `cc_shap-cot` tests; the other tests and
+models are implemented on the `vicuna-mistral-bakllava-models` branch.
+
+## Credits & licenses
+The Shapley value implementation in the `shap/` folder is a modified version of
+https://github.com/slundberg/shap . The patched mPLUG-Owl3 model code in `mplug_owl3/` is
+Apache-2.0 (see [`mplug_owl3/README.md`](mplug_owl3/README.md) for provenance and the local
+modification).
 
 ## Disclaimer
 This is work in progress. Code and paper will be revised and improved for conference submissions.
