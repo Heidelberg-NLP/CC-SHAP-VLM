@@ -51,8 +51,8 @@ dependencies = [
 package = false
 
 [tool.ruff.lint.per-file-ignores]
-# These scripts call load_env() before importing transformers/huggingface_hub so the HF
-# token/cache env vars take effect, which necessarily puts imports after a statement.
+# These entrypoints call load_env() before importing transformers/huggingface_hub so the
+# HF token/cache env vars take effect, which necessarily puts imports after a statement.
 "run-faithfulness.py" = ["E402"]
 "run-valse-acc-vlm_decoders.py" = ["E402"]
 "run-valse-mm-shap-vlm_decoders.py" = ["E402"]

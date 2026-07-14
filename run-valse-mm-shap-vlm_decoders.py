@@ -1,159 +1,50 @@
-import time, sys
-import torch
-print("Cuda is available:", torch.cuda.is_available())
-from accelerate import Accelerator
-import json
-from PIL import Image
-import random, os
+"""Entrypoint: VALSE MM-SHAP sweep (pairwise accuracy + modality importance).
 
-from load_models import load_models
-from read_datasets import read_data
-from generation_and_prompting import *
-from mm_shap_cc_shap import *
-from other_faith_tests import *
-from config import *
+    uv run python run-valse-mm-shap-vlm_decoders.py <task> <model> <num_samples> \\
+        <save_json> <data_root> [--dtype ...] [--decoding ...] [--seed N] [--deterministic]
 
-torch.cuda.empty_cache()
-accelerator = Accelerator()
-accelerator.free_memory()
+Reports pairwise accuracy (acc_r) and MM-SHAP (T-SHAP_r) over every configured instrument
+(except mscoco). ``<task>`` is accepted for CLI compatibility but ignored; ``<num_samples>``
+caps each instrument (omit / 0 processes all accepted items). See
+``ccshapvlm.valse_eval.run_mm_shap``.
+"""
 
-from transformers.utils import logging
-logging.set_verbosity_error()
-import logging
-logging.getLogger('shap').setLevel(logging.ERROR)
+from __future__ import annotations
 
-random.seed(42)
+import argparse
+import time
 
-t1 = time.time()
-
-c_task = sys.argv[1]
-model_name = sys.argv[2]
-num_samples = int(sys.argv[3])
-save_json = int(sys.argv[4])
-data_root = sys.argv[5]
-
-model, tokenizer = load_models(model_name)
-
-if __name__ == '__main__':
-    ############################# run evals on all valse instruments
-    for c_task in MULT_CHOICE_DATA.keys():
-        if c_task != "mscoco":
-            res_dict = {}
-            formatted_samples_pairwise, formatted_samples_caption, formatted_samples_foil = [], [], []
-            correct_answers, wrong_answers, image_paths = [], [], []
-            acc_r, p_c, p_f = 0, 0, 0
-            count, t_shap_c_sum, t_shap_f_sum, t_shap_r_sum = 0, 0, 0, 0
-            print("Preparing data...")
-            # read the valse data from the json files
-            images_path = f"{data_root}{MULT_CHOICE_DATA[c_task][0]}"
-            foils_path = f"{data_root}{MULT_CHOICE_DATA[c_task][1]}"
-            foils_data = read_data(c_task, foils_path, images_path, data_root)
-
-            for foil_id, foil in foils_data.items():  # tqdm
-                if c_task == 'mscoco':
-                    # for everything other than VALSE: pretend like the sample was accepted by annotators
-                    caption_fits = 3
-                else: # the subtask stems from VALSE data
-                    caption_fits = foil['mturk']['caption'] # take only samples accepted by annotators
-                if caption_fits >= 2:  # MTURK filtering! Use only valid set
-                    test_img_path = os.path.join(images_path, foil["image_file"])
-                    if c_task == 'mscoco':
-                        confounder = random.sample(sorted(foils_data.items()), 1)[0][1]
-                        test_sentences = [foil["caption"], confounder["caption"]]
-                    else:
-                        if c_task == 'plurals':
-                            test_sentences = [foil["caption"][0], foil["foil"][0]]
-                        else:
-                            test_sentences = [foil["caption"], foil["foil"][0]]
-
-                    # shuffle the order of caption and foil such that the correct answer is not always A
-                    if random.choice([0, 1]) == 0:
-                        formatted_sample_pairwise = format_example_valse_pairwise(test_sentences[0], test_sentences[1])
-                        correct_answer, wrong_answer = 'A', 'B'
-                    else:
-                        formatted_sample_pairwise = format_example_valse_pairwise(test_sentences[1], test_sentences[0])
-                        correct_answer, wrong_answer = 'B', 'A'
-
-                    formatted_sample_caption = format_example_valse(test_sentences[0])
-                    formatted_sample_foil = format_example_valse(test_sentences[1])
-
-                    formatted_samples_pairwise.append(formatted_sample_pairwise)
-                    formatted_samples_caption.append(formatted_sample_caption)
-                    formatted_samples_foil.append(formatted_sample_foil)
-                    correct_answers.append(correct_answer)
-                    wrong_answers.append(wrong_answer)
-                    image_paths.append(test_img_path)
-
-                    count += 1
-           
-            print("Done preparing data. Running test...")
-            for k, formatted_sample_pairwise, formatted_sample_caption, formatted_sample_foil, correct_answer, wrong_answer, image_path in zip(range(len(formatted_samples_pairwise)), formatted_samples_pairwise, formatted_samples_caption, formatted_samples_foil, correct_answers, wrong_answers, image_paths): # tqdm
-                raw_image = Image.open(image_path) # read image
-                if c_task in MULT_CHOICE_DATA.keys():
-                    labels = LABELS['binary']
-                elif c_task in OPEN_ENDED_DATA.keys():
-                    labels = None
-                else:
-                    labels = LABELS[c_task]
-                # compute model accuracy post-hoc
-                inp_ask_for_prediction = prompt_answer_with_input(formatted_sample_pairwise, c_task)
-                prediction = vlm_predict(copy.deepcopy(inp_ask_for_prediction), raw_image, model, tokenizer, c_task, labels=labels)
-                acc_r_sample = evaluate_prediction(prediction, correct_answer, c_task)
-                acc_r += acc_r_sample
-                _, mm_score, _, _ = explain_VLM(copy.deepcopy(inp_ask_for_prediction), raw_image, model, tokenizer, max_new_tokens=1)
-                t_shap_r_sum += mm_score
-
-                # inp_ask_for_prediction = prompt_answer_with_input(formatted_sample_caption, c_task)
-                # prediction = vlm_predict(copy.deepcopy(inp_ask_for_prediction), raw_image, model, tokenizer, c_task, labels=labels)
-                # p_c_sample = evaluate_prediction(prediction, 'A', c_task)
-                # p_c += p_c_sample
-                # _, mm_score, _, _ = explain_VLM(copy.deepcopy(inp_ask_for_prediction), raw_image, model, tokenizer, max_new_tokens=1)
-                # t_shap_c_sum += mm_score
-
-                # inp_ask_for_prediction = prompt_answer_with_input(formatted_sample_foil, c_task)
-                # prediction = vlm_predict(copy.deepcopy(inp_ask_for_prediction), raw_image, model, tokenizer, c_task, labels=labels)
-                # p_f_sample = evaluate_prediction(prediction, 'B', c_task)
-                # p_f += p_f_sample
-                # _, mm_score, _, _ = explain_VLM(copy.deepcopy(inp_ask_for_prediction), raw_image, model, tokenizer, max_new_tokens=1)
-                # t_shap_f_sum += mm_score
+from ccshapvlm.cli import add_runtime_flags, apply_runtime_args, bootstrap_runtime
+from ccshapvlm_repro import load_env
 
 
-                res_dict[f"{c_task}_{model_name}_{k}"] = {
-                    "image_path": image_path,
-                    "sample": formatted_sample_pairwise,
-                    "correct_answer": correct_answer,
-                    "post-hoc": {
-                        "acc_r": acc_r_sample,
-                        # "p_c": p_c_sample,
-                        # "p_f": p_f_sample,
-                    },
-                }
-
-                if (k+1) % 1 == 0:
-                    print(f"Ran valse eval on {c_task} {k+1} samples with model {model_name}. Reporting accuracy metrics.\n")
-                    print(f"acc_r %          : {acc_r*100/(k+1):.2f}  ")
-                    # print(f"p_c %            : {p_c*100/(k+1):.2f}  ")
-                    # print(f"p_f %            : {p_f*100/(k+1):.2f}  ")
-                    print(f"T-SHAP_r %       : {t_shap_r_sum/(k+1)*100:.2f}  ")
-                    # print(f"T-SHAP_c %       : {t_shap_c_sum/(k+1)*100:.2f}  ")
-                    # print(f"T-SHAP_f %       : {t_shap_f_sum/(k+1)*100:.2f}  ")
-
-            if save_json:
-                # save results to a json file, make results_json directory if it does not exist
-                if not os.path.exists('results_json_valse'):
-                    os.makedirs('results_json_valse')
-                with open(f"results_json_valse/{c_task}_{model_name}_{count}_valse_eval.json", 'w') as file:
-                    json.dump(res_dict, file)
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("task", help="ignored; the sweep runs every instrument")
+    parser.add_argument("model")
+    parser.add_argument("num_samples", type=int, help="per-instrument cap; 0 means all")
+    parser.add_argument("save_json", type=int)
+    parser.add_argument("data_root")
+    add_runtime_flags(parser)
+    return parser.parse_args()
 
 
-            print(f"Ran valse eval on {c_task} {count} samples with model {model_name}. Reporting accuracy metrics.\n")
-            print(f"acc_r %          : {acc_r*100/count:.2f}  ")
-            # print(f"p_c %            : {p_c*100/count:.2f}  ")
-            # print(f"p_f %            : {p_f*100/count:.2f}  ")
-            print(f"T-SHAP_r %       : {t_shap_r_sum/count*100:.2f}  ")
-            # print(f"T-SHAP_c %       : {t_shap_c_sum/count*100:.2f}  ")
-            # print(f"T-SHAP_f %       : {t_shap_f_sum/count*100:.2f}  ")
+def main() -> None:
+    args = _parse_args()
+    apply_runtime_args(args)
+    load_env()
+    bootstrap_runtime()
+
+    from ccshapvlm.models import load_adapter
+    from ccshapvlm.valse_eval import run_mm_shap
+
+    start = time.time()
+    adapter = load_adapter(args.model)
+    run_mm_shap(adapter, args.model, args.data_root, num_samples=args.num_samples or None,
+                write=bool(args.save_json))
+    print(f"\nThis script ran for {time.time() - start:.2f}s.")
 
 
-    c = time.time()-t1
-    print(f"\nThis script ran for {c // 86400:.2f} days, {c // 3600 % 24:.2f} hours, {c // 60 % 60:.2f} minutes, {c % 60:.2f} seconds.")
+if __name__ == "__main__":
+    main()

@@ -49,12 +49,33 @@ def load_env(env_file: Path = ENV_FILE) -> None:
         os.environ.setdefault("HF_HOME", cache)
 
 
+def apply_runtime_flags(dtype: Optional[str] = None, decoding: Optional[str] = None,
+                        seed: Optional[int] = None, deterministic: bool = False,
+                        scoring: Optional[str] = None) -> None:
+    """Translate the shared entrypoint CLI flags into the env vars the helpers read.
+
+    Must run before ``transformers``/``torch`` are imported: ``CUBLAS_WORKSPACE_CONFIG`` in
+    particular is only honored when set prior to the first torch import.
+    """
+    if dtype:
+        os.environ["CCVLM_DTYPE"] = dtype
+    if decoding:
+        os.environ["CCVLM_DECODING"] = decoding
+    if seed is not None:
+        os.environ["CCVLM_SEED"] = str(seed)
+    if scoring:
+        os.environ["CCVLM_SCORING"] = scoring
+    if deterministic:
+        os.environ["CCVLM_DETERMINISTIC"] = "1"
+        os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+
+
 def _runtime_choice(env_key: str, config_attr: str, default: str) -> str:
     override = os.environ.get(env_key)
     if override:
         return override.lower()
     try:
-        import config
+        from ccshapvlm import config
 
         return str(getattr(config, config_attr, default)).lower()
     except ImportError:
@@ -69,6 +90,11 @@ def greedy_generation() -> bool:
     computed on it -- comparable across runs. Selected via ``--decoding`` (or ``config.DECODING``).
     """
     return _runtime_choice("CCVLM_DECODING", "DECODING", "sample") == "greedy"
+
+
+def teacher_forced_scoring() -> bool:
+    """Score SHAP targets by teacher-forced log-odds (default) vs first-step logits."""
+    return _runtime_choice("CCVLM_SCORING", "SCORING", "teacher_forcing") == "teacher_forcing"
 
 
 def model_dtype():
@@ -104,6 +130,22 @@ def maybe_seed() -> Optional[int]:
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     return seed
+
+
+def maybe_enable_determinism() -> bool:
+    """Force deterministic CUDA kernels when ``CCVLM_DETERMINISTIC`` is set.
+
+    Pairs with ``CUBLAS_WORKSPACE_CONFIG`` (set before torch imports) and a single visible
+    GPU to remove the fp-accumulation / multi-device reduction noise that makes the SHAP
+    scores irreproducible. ``warn_only`` keeps ops lacking a deterministic kernel running
+    (they warn) instead of aborting a long run. Selected via ``--deterministic``.
+    """
+    if not os.environ.get("CCVLM_DETERMINISTIC"):
+        return False
+    import torch
+
+    torch.use_deterministic_algorithms(True, warn_only=True)
+    return True
 
 
 def _overlay(dest: Path, patched: bytes) -> bool:
