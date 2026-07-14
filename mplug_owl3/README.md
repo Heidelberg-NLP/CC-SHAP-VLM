@@ -17,5 +17,5 @@ repository root.
 The model **weights** (`model.safetensors`, ~16 GB) and the remaining remote-code files
 are **not** vendored. `scripts/setup_mplug.py` downloads the full snapshot into the
 HuggingFace cache and overlays this patched `modeling_mplugowl3.py` onto it, so
-`trust_remote_code=True` loads the fixed version. `ccshapvlm_repro.ensure_mplug_remote_code`
+`trust_remote_code=True` loads the fixed version. `ccshapvlm.models.mplug_owl3.ensure_mplug_remote_code`
 does the same automatically at load time.

@@ -28,9 +28,7 @@ from sklearn import metrics
 
 import shap
 
-from ccshapvlm_repro import model_dtype, teacher_forced_scoring
-
-from .config import MAX_NEW_TOKENS
+from .config import MAX_NEW_TOKENS, model_dtype, teacher_forced_scoring
 from .models import VLMAdapter
 
 _MAX_EVALS_LADDER = (600, 700, 800, 900)

@@ -1,7 +1,7 @@
 """Entrypoint: non-pairwise VALSE MM-SHAP for a single instrument.
 
     uv run python run-valse-mm_shap-non_pairwise-vlm_decoders.py <task> <model> \\
-        <num_samples> <data_root> [--dtype ...] [--decoding ...] [--seed N] [--deterministic]
+        <num_samples> <data_root> [--dtype ...] [--decoding ...] [--scoring ...]
 
 Scores the caption and the foil separately (rather than as one A/B question) and reports
 their precision (p_c / p_f) and MM-SHAP (T-SHAP_c / T-SHAP_f). See
@@ -14,7 +14,7 @@ import argparse
 import time
 
 from ccshapvlm.cli import add_runtime_flags, apply_runtime_args, bootstrap_runtime
-from ccshapvlm_repro import load_env
+from hf_env import load_env
 
 
 def _parse_args() -> argparse.Namespace:

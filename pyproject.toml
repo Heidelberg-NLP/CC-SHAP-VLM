@@ -7,7 +7,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     # Deep learning core. Pinned to the versions mPLUG-Owl3's trust_remote_code was
     # validated against; its custom modeling code breaks on other transformers majors,
-    # so these move together and stay in lock-step with the "before" stack.
+    # so these move together and stay pinned.
     "torch==2.5.1",
     "torchvision==0.20.1",
     "torchaudio==2.5.1",

@@ -6,14 +6,8 @@ figures/*
 # uv / virtual environment
 .venv/
 
-
-
 # Secrets (HuggingFace token, etc.)
 .env
-
-# micromamba (local conda distribution + envs) for the legacy "before" stack
-/.micromamba/
-/bin/micromamba
 
 # Datasets and sample images (fetched via scripts/prepare_sample.py)
 /data/
@@ -24,5 +18,5 @@ figures/*
 # Results written by the run-* scripts
 /results_json/
 
-# Before/after regression harness outputs
+
 /regression_results/

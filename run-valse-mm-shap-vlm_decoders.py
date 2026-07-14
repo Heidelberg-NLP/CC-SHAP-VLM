@@ -1,7 +1,7 @@
 """Entrypoint: VALSE MM-SHAP sweep (pairwise accuracy + modality importance).
 
     uv run python run-valse-mm-shap-vlm_decoders.py <task> <model> <num_samples> \\
-        <save_json> <data_root> [--dtype ...] [--decoding ...] [--seed N] [--deterministic]
+        <save_json> <data_root> [--dtype ...] [--decoding ...] [--scoring ...]
 
 Reports pairwise accuracy (acc_r) and MM-SHAP (T-SHAP_r) over every configured instrument
 (except mscoco). ``<task>`` is accepted for CLI compatibility but ignored; ``<num_samples>``
@@ -15,7 +15,7 @@ import argparse
 import time
 
 from ccshapvlm.cli import add_runtime_flags, apply_runtime_args, bootstrap_runtime
-from ccshapvlm_repro import load_env
+from hf_env import load_env
 
 
 def _parse_args() -> argparse.Namespace:

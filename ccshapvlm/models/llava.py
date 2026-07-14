@@ -16,9 +16,8 @@ import torch
 from transformers import (AutoProcessor, LlavaForConditionalGeneration,
                           LlavaNextForConditionalGeneration)
 
-from ccshapvlm_repro import greedy_generation, model_dtype
-
-from ..config import LLAVA_REVISIONS, MAX_NEW_TOKENS, MODELS
+from ..config import (LLAVA_REVISIONS, MAX_NEW_TOKENS, MODELS, greedy_generation,
+                      model_dtype)
 from .base import Prompt, VLMAdapter
 
 _VICUNA_SYSTEM = ("A chat between a curious human and an artificial intelligence assistant. "

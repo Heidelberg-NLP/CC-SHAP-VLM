@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import torch
+
 MAX_NEW_TOKENS = 100
 
-# Runtime defaults, overridable per run via run-faithfulness.py flags (--dtype/--decoding).
+# Runtime defaults, overridable per run via the run-* flags (--dtype/--decoding/--scoring).
 # Paper behavior is fp16 weights with sampled decoding; switch to float32 + greedy for
-# deterministic, cross-run-comparable scores.
+# more stable, cross-run-comparable scores.
 DTYPE = "float16"     # "float16" | "float32"
 DECODING = "sample"   # "sample" | "greedy"
 
@@ -87,6 +92,32 @@ OPEN_ENDED_DATA: dict[str, list[str]] = {
     # "gqa": ["GQA/images/", "GQA/val_all_questions.json"],
     # "gqa_balanced": ["GQA/images/", "GQA/val_balanced_questions.json"],
 }
+
+
+def greedy_generation() -> bool:
+    """Decode answers/explanations greedily instead of sampling (``--decoding``).
+
+    Paper behavior samples (``do_sample=True``), which is irreproducible run to run; greedy
+    decoding makes the generated text -- and the scores computed on it -- comparable.
+    """
+    return str(DECODING).lower() == "greedy"
+
+
+def teacher_forced_scoring() -> bool:
+    """Score SHAP targets by teacher-forced log-odds (default) vs first-step logits."""
+    return str(SCORING).lower() == "teacher_forcing"
+
+
+def model_dtype() -> torch.dtype:
+    """Torch dtype for model weights and image inputs (``--dtype``; default fp16).
+
+    fp16 matmul rounding is non-associative and, amplified across the SHAP explainer's many
+    masked forward passes, shifts the approximate SHAP ratios run to run; fp32 removes that.
+    """
+    import torch
+
+    return {"float32": torch.float32, "fp32": torch.float32}.get(
+        str(DTYPE).lower(), torch.float16)
 
 
 def is_open_ended(task: str) -> bool:

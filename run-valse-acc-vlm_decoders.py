@@ -1,7 +1,7 @@
 """Entrypoint: VALSE accuracy sweep over every configured instrument.
 
     uv run python run-valse-acc-vlm_decoders.py <task> <model> <save_json> <data_root>
-        [--dtype float16|float32] [--decoding sample|greedy] [--seed N] [--deterministic]
+        [--dtype float16|float32] [--decoding sample|greedy] [--scoring ...]
 
 Reports pairwise accuracy (acc_r) and caption-only / foil-only precision (p_c / p_f).
 ``<task>`` is accepted for CLI compatibility but ignored: the sweep runs every instrument
@@ -14,7 +14,7 @@ import argparse
 import time
 
 from ccshapvlm.cli import add_runtime_flags, apply_runtime_args, bootstrap_runtime
-from ccshapvlm_repro import load_env
+from hf_env import load_env
 
 
 def _parse_args() -> argparse.Namespace:

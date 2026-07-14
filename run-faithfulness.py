@@ -1,11 +1,10 @@
 """Entrypoint: run VLM faithfulness / CC-SHAP experiments for one task and model.
 
     uv run python run-faithfulness.py <task> <model> <num_samples> <save_json> <data_root>
-        [--dtype float16|float32] [--decoding sample|greedy] [--seed N] [--deterministic]
+        [--dtype float16|float32] [--decoding sample|greedy] [--scoring ...]
 
-``--dtype``/``--decoding`` default to ``ccshapvlm.config``; the regression harness passes
-``--decoding greedy --seed N`` for reproducibility. ``load_env`` must run before importing
-transformers, so the heavy imports follow argument parsing.
+``--dtype``/``--decoding``/``--scoring`` default to ``ccshapvlm.config``. ``load_env`` must
+run before importing transformers, so the heavy imports follow argument parsing.
 """
 
 from __future__ import annotations
@@ -14,7 +13,7 @@ import argparse
 import time
 
 from ccshapvlm.cli import add_runtime_flags, apply_runtime_args, bootstrap_runtime
-from ccshapvlm_repro import load_env
+from hf_env import load_env
 
 
 def _parse_args() -> argparse.Namespace:

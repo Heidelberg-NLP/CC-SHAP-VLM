@@ -14,13 +14,14 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import ccshapvlm_repro
+from hf_env import load_env
 
-ccshapvlm_repro.load_env()
+load_env()
 
 from huggingface_hub import snapshot_download
 
-from config import MODELS, MPLUG_REVISIONS
+from ccshapvlm.config import MODELS, MPLUG_REVISIONS
+from ccshapvlm.models.mplug_owl3 import ensure_mplug_remote_code
 
 
 def main() -> None:
@@ -33,7 +34,7 @@ def main() -> None:
     print(f"Downloading {model_id} (revision={revision}) ...")
     snapshot_download(model_id, revision=revision)
 
-    ccshapvlm_repro.ensure_mplug_remote_code(model_id, revision)
+    ensure_mplug_remote_code(model_id, revision)
     print(f"Applied patched modeling_mplugowl3.py for {model_id}.")
 
 

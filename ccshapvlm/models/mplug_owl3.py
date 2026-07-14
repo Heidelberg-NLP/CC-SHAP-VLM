@@ -8,21 +8,50 @@ fixed block of special image-prompt tokens that must never be masked by SHAP.
 from __future__ import annotations
 
 import copy
+import os
+from pathlib import Path
 
 import numpy as np
 import torch
 from PIL import Image
 from transformers import AutoModel, AutoTokenizer
 
-from ccshapvlm_repro import ensure_mplug_remote_code, greedy_generation, model_dtype
-
-from ..config import MAX_NEW_TOKENS, MODELS, MPLUG_REVISIONS, is_open_ended
+from ..config import (MAX_NEW_TOKENS, MODELS, MPLUG_REVISIONS, greedy_generation,
+                      is_open_ended, model_dtype)
 from ..prompts import PHRASE_ANSWER_MULTIPLE_CHOICE, PHRASE_ANSWER_OPEN_ENDED
 from .base import Prompt, VLMAdapter
+
+_PATCH_FILE = "modeling_mplugowl3.py"
+_PATCH_SOURCE = Path(__file__).resolve().parents[2] / "mplug_owl3" / _PATCH_FILE
 
 # the last ``<|image|>``-region token (1805) plus its trailing 4 scaffold tokens.
 _IMAGE_PROMPT_MARKER = 1805
 _KEEP_TOKEN_IDS = [151644, 151645]  # <|im_start|>, <|im_end|>
+
+
+def _overlay(dest: Path, patched: bytes) -> None:
+    if dest.is_file() and dest.read_bytes() == patched:
+        return
+    if dest.is_symlink():
+        dest.unlink()  # replace the cache symlink with a real file, don't edit the blob
+    dest.write_bytes(patched)
+
+
+def ensure_mplug_remote_code(model_id: str, revision: str | None = None) -> None:
+    """Overlay the vendored patched ``modeling_mplugowl3.py`` onto the HF cache.
+
+    ``trust_remote_code`` copies the model's ``.py`` files from the snapshot into
+    ``$HF_HOME/modules`` and imports them, so we patch both the snapshot source (what
+    transformers copies from) and any already-materialized module copy.
+    """
+    from huggingface_hub import hf_hub_download
+
+    patched = _PATCH_SOURCE.read_bytes()
+    _overlay(Path(hf_hub_download(model_id, _PATCH_FILE, revision=revision)), patched)
+
+    modules_root = Path(os.environ.get("HF_HOME", Path.home() / ".cache/huggingface"))
+    for module_copy in (modules_root / "modules").rglob(_PATCH_FILE):
+        _overlay(module_copy, patched)
 
 
 def _user_content(inputt: str) -> str:

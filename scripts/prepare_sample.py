@@ -1,8 +1,8 @@
 """Fetch a small, self-contained sample of the VALSE ``foil_it`` instrument.
 
 The paper reads the full VALSE ``foil-it.json`` (1000 entries) plus the referenced COCO
-val2014 images. For smoke tests and the before/after regression harness we only need a
-handful, so this downloads the annotation json, keeps the first ``--num`` entries that pass
+val2014 images. For smoke tests we only need a handful, so this downloads the annotation
+json, keeps the first ``--num`` entries that pass
 the same MTurk filter ``run-faithfulness.py`` applies (``mturk['caption'] >= 2``), fetches
 their COCO images, and writes a reduced ``foil-it.json`` plus images under ``--root``
 (default ``data/``, matching ``MULT_CHOICE_DATA['foil_it']`` in config.py).

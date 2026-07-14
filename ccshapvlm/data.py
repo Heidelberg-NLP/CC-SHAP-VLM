@@ -169,7 +169,6 @@ def _read_vqa(vqa_path: str, data_root: str) -> dict:
     qa = {ann["question_id"]: ann for ann in annotations}
 
     questions = json.loads(Path(vqa_path).read_text())["questions"]
-    np.random.seed(0)
     subsample = np.random.choice(len(questions), 300, replace=False)
 
     foils_data: dict = {}
@@ -188,7 +187,6 @@ def _read_vqa(vqa_path: str, data_root: str) -> dict:
 
 def _read_gqa(gqa_path: str) -> dict:
     gqa_data = json.loads(Path(gqa_path).read_text())
-    np.random.seed(0)
     gqa_data = dict(random.sample(sorted(gqa_data.items()), 300))
     return {
         idx: {
@@ -204,7 +202,6 @@ def _read_gqa(gqa_path: str) -> dict:
 
 def _read_nlvr2(nlvr_path: str, images_root: str) -> dict:
     nlvr_data = [json.loads(line) for line in Path(nlvr_path).read_text().splitlines()]
-    np.random.seed(0)
     subsample = np.random.choice(len(nlvr_data), 1500, replace=False)
 
     foils_data: dict = {}
